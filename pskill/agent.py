@@ -9,7 +9,7 @@ from typing import Any, Callable
 from . import config
 from .tools import TOOL_SCHEMAS, execute_tool
 
-SYSTEM_PROMPT = """You are pskill — an autonomous AI OS Controller and Senior Security Operator for Kali Linux.
+SYSTEM_PROMPT = """You are Kali Agent — an autonomous AI OS Controller and Senior Security Operator for Kali Linux.
 
 You have full control over the local Kali Linux system and environment. You can:
 1. EXECUTE OS COMMANDS: Run any bash command, script, binary, or CLI utility across Kali Linux.

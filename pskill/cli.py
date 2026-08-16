@@ -33,12 +33,12 @@ console = Console()
 VERSION = "3.0.0"
 
 LOGO = """[bold red]
-  ██████╗ ███████╗██╗  ██╗██╗██╗     ██╗
-  ██╔══██╗██╔════╝██║ ██╔╝██║██║     ██║
-  ██████╔╝███████╗█████╔╝ ██║██║     ██║
-  ██╔═══╝ ╚════██║██╔═██╗ ██║██║     ██║
-  ██║     ███████║██║  ██╗██║███████╗███████╗
-  ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝[/bold red]"""
+  ██╗  ██╗ █████╗ ██╗     ██╗     █████╗  ██████╗ ███████╗███╗   ██╗████████╗
+  ██║ ██╔╝██╔══██╗██║     ██║    ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝
+  █████╔╝ ███████║██║     ██║    ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║   
+  ██╔═██╗ ██╔══██║██║     ██║    ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║   
+  ██║  ██╗██║  ██║███████╗██║    ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   
+  ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝    ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   [/bold red]"""
 
 SLASH_CMDS = {
     "/scope":       "Set or confirm authorization scope (lab, ctf, bounty)",
@@ -53,7 +53,7 @@ SLASH_CMDS = {
     "/compact":     "Compress and summarize conversation history",
     "/clear":       "Clear current conversation history",
     "/help":        "Show available commands and usage guide",
-    "/exit":        "Exit pskill agent",
+    "/exit":        "Exit Kali Agent",
 }
 
 
@@ -63,7 +63,7 @@ def setup_wizard() -> None:
     """Interactive first-run config — similar to Claude Code's onboarding."""
     console.print()
     console.print(Panel(
-        "[bold white]Welcome to pskill![/]\n\n"
+        "[bold white]Welcome to Kali Agent![/]\n\n"
         "Configure your AI provider. You can use an API key from any of:\n"
         "  • [cyan]Anthropic[/] (claude-sonnet-4-5) — [dim]https://console.anthropic.com[/]\n"
         "  • [cyan]OpenAI[/] (gpt-4o) — [dim]https://platform.openai.com[/]\n"
@@ -470,7 +470,7 @@ def run() -> None:
 
     # CLI flag checks
     if raw_args and raw_args[0] in ("-v", "--version"):
-        print(f"pskill v{VERSION}")
+        print(f"kali-agent v{VERSION}")
         return
 
     if raw_args and raw_args[0] in ("-h", "--help"):
@@ -480,7 +480,7 @@ def run() -> None:
         table.add_column("Description", style="white")
         for c, d in SLASH_CMDS.items():
             table.add_row(c, d)
-        console.print(Panel(table, title="[bold red]pskill — AI Pentesting Agent[/]",
+        console.print(Panel(table, title="[bold red]Kali Agent — Autonomous AI for Kali Linux[/]",
                             border_style="red", padding=(1, 2)))
         return
 
@@ -505,7 +505,7 @@ def run() -> None:
         else:
             # Natural language one-shot prompt
             prompt = " ".join(raw_args)
-            console.print(f"[dim]pskill ❯ {prompt}[/]\n")
+            console.print(f"[dim]kali-agent ❯ {prompt}[/]\n")
             with Live(Spinner("dots", text="[red dim]thinking…[/]"), refresh_per_second=20, transient=True):
                 try:
                     res = agent.chat(prompt, confirm_fn=_confirm_command)
@@ -532,7 +532,7 @@ def run() -> None:
         try:
             target_part = f"[{agent.current_target}]" if agent.current_target else ""
             prompt_parts = [
-                ("class:prompt", f" pskill{target_part} "),
+                ("class:prompt", f" kali-agent{target_part} "),
                 ("",             " ❯ "),
                 ("",             " "),
             ]

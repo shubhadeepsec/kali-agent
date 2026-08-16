@@ -1,11 +1,11 @@
-"""pskill setup — pip install -e . makes pskill available system-wide."""
+"""kali-agent setup — pip install -e . makes kali-agent available system-wide."""
 from setuptools import setup, find_packages
 
 setup(
-    name="pskill",
+    name="kali-agent",
     version="3.0.0",
-    description="AI-powered pentesting agent — like Claude Code, but for hacking",
-    author="pskill",
+    description="Kali Agent — Autonomous AI OS Controller and Security Agent for Kali Linux",
+    author="Kali Agent Team",
     python_requires=">=3.9",
     packages=find_packages(),
     install_requires=[
@@ -18,6 +18,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
+            "kali-agent=pskill.cli:run",
             "pskill=pskill.cli:run",
         ],
     },

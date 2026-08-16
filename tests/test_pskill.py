@@ -182,10 +182,10 @@ def test_message_formatting():
 def test_cli_flags():
     print("[*] Testing CLI executable and flags...")
     res = subprocess.run([sys.executable, str(ROOT / "pskill.py"), "--version"], capture_output=True, text=True)
-    assert "pskill v3.0.0" in res.stdout
+    assert "kali-agent v3.0.0" in res.stdout
 
     res_help = subprocess.run([sys.executable, str(ROOT / "pskill.py"), "--help"], capture_output=True, text=True)
-    assert "pskill" in res_help.stdout
+    assert "Kali Agent" in res_help.stdout
     assert "/scope" in res_help.stdout
 
     print("  [✓] CLI flags tests passed")
