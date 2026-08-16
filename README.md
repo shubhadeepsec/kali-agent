@@ -8,13 +8,13 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Skills: 16 Modules](https://img.shields.io/badge/Playbooks-16%20Specialized%20Skills-red.svg?style=for-the-badge)](pentest-skill/skills)
+[![Skills: 16 Modules](https://img.shields.io/badge/Playbooks-16%20Specialized%20Skills-red.svg?style=for-the-badge)](#the-16-skill-playbooks)
 [![Agent: Neutral](https://img.shields.io/badge/Agent-Agnostic%20(Claude%20%7C%20Cursor%20%7C%20AGY)-purple.svg?style=for-the-badge)](AGENTS.md)
 [![Scope: Gated](https://img.shields.io/badge/Scope-Strictly%20Gated-success.svg?style=for-the-badge)](pentest-skill/AUTHORIZATION.example.md)
 
 <br/>
 
-[Key Features](#-key-features) • [System Architecture](#-system-architecture--workflow) • [Quick Start](#-quick-start) • [The 16 Skill Playbooks](#-the-16-skill-playbooks) • [The Senior ACT Loop](#-the-senior-act-loop-methodology) • [CLI Scripts](#-cli-scripts-reference) • [Tool Index](#-supported-tools--environment) • [Verification](#-testing--verification)
+[Key Features](#key-features) • [System Architecture](#system-architecture--workflow) • [Quick Start](#quick-start) • [The 16 Skill Playbooks](#the-16-skill-playbooks) • [The Senior ACT Loop](#the-senior-act-loop-methodology) • [CLI Scripts](#cli-scripts-reference) • [Tool Index](#supported-tools--environment) • [Verification](#testing--verification)
 
 </div>
 
@@ -74,14 +74,14 @@ flowchart TD
         G[Execute Tool / Command] --> H[Log Row: append_evidence.py]
         H --> I[Update State: intel.py / ingest_ffuf.py]
         I --> J[Rank Next Actions: next_steps.py]
-        J --> K{Select Highest Priority Diversified Step}
+        J --> K[Select Highest Priority Diversified Step]
         K --> G
     end
     
-    F --> Senior_ACT_Loop
-    Senior_ACT_Loop --> L[Run Surface Audit: surface_audit.py]
+    F --> G
+    J --> L[Run Surface Audit: surface_audit.py]
     
-    L -- Gaps Remaining --> Senior_ACT_Loop
+    L -- Gaps Remaining --> G
     L -- 0 Critical Gaps --> M[Generate Report: skills/reporting]
     M --> N[Engagement Complete]
 ```
@@ -92,11 +92,11 @@ flowchart TD
 
 ### 1. Clone or Add to Your Project
 
-Clone Pentest-Skill into your existing target workspace:
+Clone Pentest-Skill into your target workspace:
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USER/pentest-skill.git my-engagement
+git clone https://github.com/shubhadeepsec/Pentest-Skill.git my-engagement
 cd my-engagement
 ```
 
@@ -151,22 +151,22 @@ Pentest-Skill organizes offensive security methodology into 16 specialized playb
 
 | Category | Skill | Core Focus & Methodology | Primary Tools |
 | :--- | :--- | :--- | :--- |
-| **Reconnaissance** | [`web-recon`](pentest-skill/skills/web-recon) | Subdomain discovery, open port scanning, service versioning, directory fuzzing, tech fingerprinting | `nmap`, `ffuf`, `subfinder`, `httpx`, `whatweb` |
-| **API Security** | [`api-testing`](pentest-skill/skills/api-testing) | REST/GraphQL audits, OpenAPI/Swagger ingestion, mass assignment, hidden parameter fuzzing | `curl`, `jq`, `ffuf`, `Burp Suite` |
-| **Authorization** | [`idor-bola`](pentest-skill/skills/idor-bola) | Horizontal/vertical privilege escalation, BFLA, parameter swap across GET/PUT/DELETE | `Burp Repeater`, `curl`, custom PoCs |
-| **Injection** | [`injection`](pentest-skill/skills/injection) | SQLi (Union, Error, Blind, Time), SSTI, Command Injection, XXE, Deserialization | `sqlmap`, `curl`, `Burp Intruder` |
-| **Web Infrastructure** | [`http-advanced`](pentest-skill/skills/http-advanced) | HTTP Request Smuggling (CL.TE / TE.CL), Cache Poisoning, Host header injection, 403 bypasses | `curl`, `Burp Repeater`, custom python |
-| **Network Pivoting** | [`ssrf`](pentest-skill/skills/ssrf) | Server-Side Request Forgery, cloud metadata interrogation (AWS/GCP/Azure), internal service probing | `curl`, `interactsh`, `Burp Collaborator` |
-| **Authentication** | [`oauth-auth`](pentest-skill/skills/oauth-auth) | OAuth2/OIDC flaw analysis, CSRF on login, JWT secret brute-forcing, algorithm confusion | `jwt_tool`, `Burp Suite`, `curl` |
-| **Logic & Workflows** | [`business-logic`](pentest-skill/skills/business-logic) | Multi-step transaction bypasses, coupon stacking, race conditions, price manipulation | `Turbo Intruder`, `curl`, `Burp Suite` |
-| **Frontend Reverse** | [`js-reverse`](pentest-skill/skills/js-reverse) | Webpack bundle deobfuscation, sourcemap extraction, API key discovery, hidden endpoint mining | `sourcemapper`, `grep`, `nodejs` |
-| **Android Static** | [`apk-reverse`](pentest-skill/skills/apk-reverse) | APK decompilation, AndroidManifest component audit, hardcoded cryptographic secrets | `jadx`, `apktool`, `apkid` |
-| **Mobile Runtime** | [`mobile-advanced`](pentest-skill/skills/mobile-advanced) | Dynamic hooking, SSL pinning bypass, root detection evasion, biometric bypass | `frida`, `objection`, `adb` |
-| **Binary Exploitation** | [`binary-reverse`](pentest-skill/skills/binary-reverse) | ELF/PE analysis, Ghidra decompilation, buffer overflow triage, ROP gadgets, checksec | `ghidra`, `radare2`, `gdb-pwndbg`, `checksec` |
-| **Cloud Security** | [`cloud-security`](pentest-skill/skills/cloud-security) | AWS S3 bucket permissions, Azure Blob audits, GCP IAM role privilege escalation | `awscli`, `scoutsuite`, `trufflehog` |
-| **Active Directory** | [`ad-pentest`](pentest-skill/skills/ad-pentest) | Internal domain recon, Kerberoasting, AS-REP roasting, BloodHound attack path graph | `impacket`, `bloodhound-python`, `crackmapexec` |
-| **Post-Exploitation** | [`post-exploit`](pentest-skill/skills/post-exploit) | Linux/Windows privilege escalation checks, credential harvesting, persistence, cleanup | `linpeas`, `winpeas`, native CLI |
-| **Deliverables** | [`reporting`](pentest-skill/skills/reporting) | Executive summaries, technical reproduction steps, CVSS scoring, remediation guidance | Markdown, JSON templates |
+| **Reconnaissance** | [`web-recon`](pentest-skill/skills/web-recon/SKILL.md) | Subdomain discovery, open port scanning, service versioning, directory fuzzing, tech fingerprinting | `nmap`, `ffuf`, `subfinder`, `httpx`, `whatweb` |
+| **API Security** | [`api-testing`](pentest-skill/skills/api-testing/SKILL.md) | REST/GraphQL audits, OpenAPI/Swagger ingestion, mass assignment, hidden parameter fuzzing | `curl`, `jq`, `ffuf`, `Burp Suite` |
+| **Authorization** | [`idor-bola`](pentest-skill/skills/idor-bola/SKILL.md) | Horizontal/vertical privilege escalation, BFLA, parameter swap across GET/PUT/DELETE | `Burp Repeater`, `curl`, custom PoCs |
+| **Injection** | [`injection`](pentest-skill/skills/injection/SKILL.md) | SQLi (Union, Error, Blind, Time), SSTI, Command Injection, XXE, Deserialization | `sqlmap`, `curl`, `Burp Intruder` |
+| **Web Infrastructure** | [`http-advanced`](pentest-skill/skills/http-advanced/SKILL.md) | HTTP Request Smuggling (CL.TE / TE.CL), Cache Poisoning, Host header injection, 403 bypasses | `curl`, `Burp Repeater`, custom python |
+| **Network Pivoting** | [`ssrf`](pentest-skill/skills/ssrf/SKILL.md) | Server-Side Request Forgery, cloud metadata interrogation (AWS/GCP/Azure), internal service probing | `curl`, `interactsh`, `Burp Collaborator` |
+| **Authentication** | [`oauth-auth`](pentest-skill/skills/oauth-auth/SKILL.md) | OAuth2/OIDC flaw analysis, CSRF on login, JWT secret brute-forcing, algorithm confusion | `jwt_tool`, `Burp Suite`, `curl` |
+| **Logic & Workflows** | [`business-logic`](pentest-skill/skills/business-logic/SKILL.md) | Multi-step transaction bypasses, coupon stacking, race conditions, price manipulation | `Turbo Intruder`, `curl`, `Burp Suite` |
+| **Frontend Reverse** | [`js-reverse`](pentest-skill/skills/js-reverse/SKILL.md) | Webpack bundle deobfuscation, sourcemap extraction, API key discovery, hidden endpoint mining | `sourcemapper`, `grep`, `nodejs` |
+| **Android Static** | [`apk-reverse`](pentest-skill/skills/apk-reverse/SKILL.md) | APK decompilation, AndroidManifest component audit, hardcoded cryptographic secrets | `jadx`, `apktool`, `apkid` |
+| **Mobile Runtime** | [`mobile-advanced`](pentest-skill/skills/mobile-advanced/SKILL.md) | Dynamic hooking, SSL pinning bypass, root detection evasion, biometric bypass | `frida`, `objection`, `adb` |
+| **Binary Exploitation** | [`binary-reverse`](pentest-skill/skills/binary-reverse/SKILL.md) | ELF/PE analysis, Ghidra decompilation, buffer overflow triage, ROP gadgets, checksec | `ghidra`, `radare2`, `gdb-pwndbg`, `checksec` |
+| **Cloud Security** | [`cloud-security`](pentest-skill/skills/cloud-security/SKILL.md) | AWS S3 bucket permissions, Azure Blob audits, GCP IAM role privilege escalation | `awscli`, `scoutsuite`, `trufflehog` |
+| **Active Directory** | [`ad-pentest`](pentest-skill/skills/ad-pentest/SKILL.md) | Internal domain recon, Kerberoasting, AS-REP roasting, BloodHound attack path graph | `impacket`, `bloodhound-python`, `crackmapexec` |
+| **Post-Exploitation** | [`post-exploit`](pentest-skill/skills/post-exploit/SKILL.md) | Linux/Windows privilege escalation checks, credential harvesting, persistence, cleanup | `linpeas`, `winpeas`, native CLI |
+| **Deliverables** | [`reporting`](pentest-skill/skills/reporting/SKILL.md) | Executive summaries, technical reproduction steps, CVSS scoring, remediation guidance | Markdown, JSON templates |
 
 ---
 
