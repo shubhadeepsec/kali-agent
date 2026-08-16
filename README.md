@@ -102,17 +102,24 @@ cd my-engagement
 
 ### 2. Configure Scope & Legal Authorization
 
-Create your target-specific authorization record:
+Quickly configure authorization in one command using the `scope.py` CLI helper:
 
 ```bash
-cp pentest-skill/AUTHORIZATION.example.md pentest-skill/AUTHORIZATION.md
-```
+# Option A: Quick setup for local labs / Docker / localhost
+python3 pentest-skill/scripts/scope.py quick-lab --target "127.0.0.1"
 
-Edit `pentest-skill/AUTHORIZATION.md` with:
-- **Program Name & Source** (e.g., HackerOne, Bugcrowd, VDP, Authorized Pentest Contract)
-- **In-Scope Targets** (Specific domains, IP ranges, endpoints, APK files)
-- **Out-of-Scope Assets** (Strictly forbidden targets, third-party services)
-- **Testing Constraints** (Rate limits, forbidden DoS attacks, safe testing credentials)
+# Option B: Quick setup for CTF challenges
+python3 pentest-skill/scripts/scope.py quick-ctf --target "10.10.10.50" --name "HTB-Machine"
+
+# Option C: Quick setup for authorized Bug Bounty program
+python3 pentest-skill/scripts/scope.py quick-bounty \
+  --target "app.example.com" \
+  --name "Acme Corp Bounty" \
+  --source "https://hackerone.com/acme"
+
+# Option D: View current active scope
+python3 pentest-skill/scripts/scope.py show
+```
 
 > [!IMPORTANT]
 > The `pentest-skill/AUTHORIZATION.md` file is gitignored by default to prevent accidental leakage of confidential customer or bounty scopes into version control.
@@ -238,6 +245,7 @@ The engine balances technical vectors across skills to prevent infinite loops on
 
 | Script | Purpose | Key Arguments / Example |
 | :--- | :--- | :--- |
+| `scope.py` | Configures & manages `AUTHORIZATION.md` in one command | `quick-lab`, `quick-ctf`, `quick-bounty`, `set`, `show` |
 | `engagement_init.py` | Initializes new target engagement directory & JSON state | `--target <host> [--mode bounty\|vdp\|lab\|ctf] [--skill <skill>]` |
 | `intel.py` | Query & manipulate target state in `intel.json` | `intel.json <subcommand> [args]` (see subcommands below) |
 | `append_evidence.py` | Appends structured row to `evidence.md` | `--skill <skill> --command "<cmd>" --result "<summary>"` |

@@ -22,6 +22,7 @@ web-recon, idor-bola, api-testing, js-reverse, apk-reverse, mobile-advanced, bin
 
 | Script | Purpose |
 |--------|---------|
+| `scope.py` | Quick scope setup & management |
 | `engagement_init.py` | New engagement folder |
 | `intel.py` | Ports, endpoints, params, done/blocked |
 | `next_steps.py` | Senior-ranked diverse next commands |
