@@ -14,19 +14,24 @@ Route → scope gate → skill → **senior ACT loop** (evidence → intel → n
 4. Route → skill → after **each** tool: [pentest-skill/shared/chaining.md](pentest-skill/shared/chaining.md)
 5. Complete: `python3 pentest-skill/scripts/surface_audit.py engagement/.../intel.json`
 
-## 16 skills
+## 17 skills
 
-web-recon, idor-bola, api-testing, js-reverse, apk-reverse, mobile-advanced, binary-reverse, **injection**, **http-advanced**, ssrf, oauth-auth, business-logic, cloud-security, ad-pentest, post-exploit, reporting
+web-recon, idor-bola, api-testing, js-reverse, apk-reverse, mobile-advanced, binary-reverse, **injection**, **http-advanced**, ssrf, oauth-auth, business-logic, cloud-security, ad-pentest, post-exploit, **ai-llm-security**, reporting
 
-## Scripts
+## Scripts & CLI
 
 | Script | Purpose |
 |--------|---------|
+| `pskill` | Unified master CLI dispatcher |
 | `scope.py` | Quick scope setup & management |
 | `engagement_init.py` | New engagement folder |
 | `intel.py` | Ports, endpoints, params, done/blocked |
 | `next_steps.py` | Senior-ranked diverse next commands |
 | `surface_audit.py` | Critical gap audit — senior-complete gate |
+| `report_gen.py` | Markdown report compiler |
+| `ingest_httpx.py` | Ingest live HTTP probe & tech data |
+| `ingest_nuclei.py` | Ingest Nuclei vulnerability findings |
+| `ingest_swagger.py` | Ingest OpenAPI / Swagger specs |
 | `ingest_ffuf.py` | ffuf JSON → intel endpoints |
 | `append_evidence.py` | Evidence log |
 | `test_chaining.py` | Smoke test |

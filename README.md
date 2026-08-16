@@ -8,13 +8,13 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Skills: 16 Modules](https://img.shields.io/badge/Playbooks-16%20Specialized%20Skills-red.svg?style=for-the-badge)](#the-16-skill-playbooks)
+[![Skills: 17 Modules](https://img.shields.io/badge/Playbooks-17%20Specialized%20Skills-red.svg?style=for-the-badge)](#the-17-skill-playbooks)
 [![Agent: Neutral](https://img.shields.io/badge/Agent-Agnostic%20(Claude%20%7C%20Cursor%20%7C%20AGY)-purple.svg?style=for-the-badge)](AGENTS.md)
 [![Scope: Gated](https://img.shields.io/badge/Scope-Strictly%20Gated-success.svg?style=for-the-badge)](pentest-skill/AUTHORIZATION.example.md)
 
 <br/>
 
-[Key Features](#key-features) • [System Architecture](#system-architecture--workflow) • [Quick Start](#quick-start) • [The 16 Skill Playbooks](#the-16-skill-playbooks) • [The Senior ACT Loop](#the-senior-act-loop-methodology) • [CLI Scripts](#cli-scripts-reference) • [Tool Index](#supported-tools--environment) • [Verification](#testing--verification)
+[Key Features](#key-features) • [System Architecture](#system-architecture--workflow) • [Quick Start](#quick-start) • [The 17 Skill Playbooks](#the-17-skill-playbooks) • [The Senior ACT Loop](#the-senior-act-loop-methodology) • [CLI Scripts](#cli-scripts-reference) • [Tool Index](#supported-tools--environment) • [Verification](#testing--verification)
 
 </div>
 
@@ -29,7 +29,7 @@ Standard Large Language Model (LLM) coding agents frequently fail at real-world 
 ### Why Pentest-Skill?
 
 - 🛡️ **Mandatory Scope Gate**: Hard authorization boundaries prevent agents from sending unauthorized packets or scanning out-of-scope targets.
-- 🎯 **16 Battle-Tested Playbooks**: Deep, technical instructions and verified command sequences covering Web, API, Mobile, Reverse Engineering, Cloud, Active Directory, and Post-Exploitation.
+- 🎯 **17 Battle-Tested Playbooks**: Deep, technical instructions and verified command sequences covering Web, API, Mobile, Reverse Engineering, Cloud, Active Directory, AI/LLM Security, and Post-Exploitation.
 - 🧠 **Persistent Stateful Memory (`intel.json`)**: Eliminates agent amnesia by tracking hosts, open ports, discovered endpoints, parameter matrices, tech stacks, and confirmed vulnerabilities.
 - 🔄 **The Senior ACT Loop**: Automatically chains evidence capture, intelligence ingestion, and heuristic-ranked next steps after every single tool execution.
 - 🚦 **Coverage & Surface Auditor (`surface_audit.py`)**: Prevents premature completion by auditing attack surface coverage and highlighting overlooked vulnerability classes.
@@ -43,17 +43,18 @@ Standard Large Language Model (LLM) coding agents frequently fail at real-world 
 │                            PENTEST-SKILL CORE                               │
 ├──────────────────┬──────────────────┬──────────────────┬────────────────────┤
 │  Scope Gatekeeper│ Intelligent Router│ Stateful Intel   │ Coverage Auditor   │
-│  Hard boundary   │ 16 domain skills │ Continuous JSON  │ Zero critical gaps │
+│  Hard boundary   │ 17 domain skills │ Continuous JSON  │ Zero critical gaps │
 │  authorization   │ mapped by signal │ memory across    │ verified prior to  │
 │  validation      │ & tech indicators│ execution loops  │ final reporting    │
 └──────────────────┴──────────────────┴──────────────────┴────────────────────┘
 ```
 
-1. **Agent-Neutral Architecture**: Zero vendor lock-in. Reads cleanly through `AGENTS.md`, `CLAUDE.md`, `README_AI.md`, or direct prompt bootstrapping (`pentest-skill/SKILL.md`).
-2. **Heuristic Next-Step Ranking Engine**: Evaluates gathered target intelligence to recommend mathematically prioritized, diversified technical actions.
-3. **Structured Ingestion Pipelines**: Built-in parsers for standard security tooling outputs (`Nmap` `-oN` outputs, `ffuf` JSON fuzzing logs, etc.).
-4. **Formal Evidence Logging**: Chronological markdown ledger maintaining command execution records, timestamps, tool results, and notes for audit compliance and reporting.
-5. **Ethical & Professional Reporting Engine**: Standardized vulnerability stubs and CVSS v3.1 templates for rapid bug bounty submission and client deliverables.
+1. **Unified `pskill` CLI Dispatcher**: Single master CLI to orchestrate scope, engagement lifecycle, tooling ingestion, chaining, and reporting.
+2. **Agent-Neutral Architecture**: Zero vendor lock-in. Reads cleanly through `AGENTS.md`, `CLAUDE.md`, `README_AI.md`, or direct prompt bootstrapping (`pentest-skill/SKILL.md`).
+3. **Heuristic Next-Step Ranking Engine**: Evaluates gathered target intelligence to recommend mathematically prioritized, diversified technical actions.
+4. **Automated Report Generator**: One command compiles executive markdown reports with CVSS severity distributions, PoC logs, and remediation roadmaps.
+5. **Multi-Tool Ingestion Pipelines**: Built-in parsers for `Nmap`, `ffuf`, `httpx`, `Nuclei`, and `Swagger/OpenAPI` JSON/YAML specifications.
+6. **Formal Evidence Logging**: Chronological markdown ledger maintaining command execution records, timestamps, tool results, and notes for audit compliance.
 
 ---
 
@@ -72,7 +73,7 @@ flowchart TD
     
     subgraph Senior_ACT_Loop [The Senior ACT Loop]
         G[Execute Tool / Command] --> H[Log Row: append_evidence.py]
-        H --> I[Update State: intel.py / ingest_ffuf.py]
+        H --> I[Update State: intel.py / Ingestion Parsers]
         I --> J[Rank Next Actions: next_steps.py]
         J --> K[Select Highest Priority Diversified Step]
         K --> G
@@ -82,7 +83,7 @@ flowchart TD
     J --> L[Run Surface Audit: surface_audit.py]
     
     L -- Gaps Remaining --> G
-    L -- 0 Critical Gaps --> M[Generate Report: skills/reporting]
+    L -- 0 Critical Gaps --> M[Generate Report: report_gen.py]
     M --> N[Engagement Complete]
 ```
 
@@ -102,7 +103,7 @@ cd my-engagement
 
 ### 2. Configure Scope & Legal Authorization
 
-Quickly configure authorization in one command using the `scope.py` CLI helper:
+Quickly configure authorization in one command using the `scope.py` CLI helper (or `pskill scope`):
 
 ```bash
 # Option A: Quick setup for local labs / Docker / localhost
@@ -152,9 +153,9 @@ Execute the web-recon methodology, ingest findings into intel.json, and chain ne
 
 ---
 
-## 📚 The 16 Skill Playbooks
+## 📚 The 17 Skill Playbooks
 
-Pentest-Skill organizes offensive security methodology into 16 specialized playbooks located in `pentest-skill/skills/`.
+Pentest-Skill organizes offensive security methodology into 17 specialized playbooks located in `pentest-skill/skills/`.
 
 | Category | Skill | Core Focus & Methodology | Primary Tools |
 | :--- | :--- | :--- | :--- |
@@ -173,6 +174,7 @@ Pentest-Skill organizes offensive security methodology into 16 specialized playb
 | **Cloud Security** | [`cloud-security`](pentest-skill/skills/cloud-security/SKILL.md) | AWS S3 bucket permissions, Azure Blob audits, GCP IAM role privilege escalation | `awscli`, `scoutsuite`, `trufflehog` |
 | **Active Directory** | [`ad-pentest`](pentest-skill/skills/ad-pentest/SKILL.md) | Internal domain recon, Kerberoasting, AS-REP roasting, BloodHound attack path graph | `impacket`, `bloodhound-python`, `crackmapexec` |
 | **Post-Exploitation** | [`post-exploit`](pentest-skill/skills/post-exploit/SKILL.md) | Linux/Windows privilege escalation checks, credential harvesting, persistence, cleanup | `linpeas`, `winpeas`, native CLI |
+| **AI & LLM Security** | [`ai-llm-security`](pentest-skill/skills/ai-llm-security/SKILL.md) | OWASP LLM Top 10, direct/indirect prompt injection, tool calling SSRF, markdown XSS | `curl`, `jq`, custom agent probes |
 | **Deliverables** | [`reporting`](pentest-skill/skills/reporting/SKILL.md) | Executive summaries, technical reproduction steps, CVSS scoring, remediation guidance | Markdown, JSON templates |
 
 ---
@@ -219,25 +221,37 @@ python3 pentest-skill/scripts/intel.py $ENG/intel.json add-param "GET /api/v2/it
 python3 pentest-skill/scripts/intel.py $ENG/intel.json add-tech "nginx 1.18.0"
 ```
 
-### 4. Ingest Fuzzing Discoveries
-When fuzzing paths or parameters with `ffuf`, automatically parse the results:
+### 4. Multi-Tool Ingestion Automation
+Automatically parse scan outputs from your favorite tools:
 
 ```bash
-ffuf -u https://app.example.com/FUZZ -w /usr/share/wordlists/dirb/common.txt \
-  -o $ENG/evidence/ffuf_dirs.json -of json
+# Ingest ffuf directory fuzzing output
+python3 pentest-skill/scripts/ingest_ffuf.py $ENG/intel.json $ENG/evidence/ffuf_dirs.json --base-url https://app.example.com
 
-python3 pentest-skill/scripts/ingest_ffuf.py $ENG/intel.json $ENG/evidence/ffuf_dirs.json \
-  --base-url https://app.example.com
+# Ingest httpx web probe & technology identification
+python3 pentest-skill/scripts/ingest_httpx.py $ENG/intel.json $ENG/evidence/httpx.json
+
+# Ingest Nuclei vulnerability scanner findings
+python3 pentest-skill/scripts/ingest_nuclei.py $ENG/intel.json $ENG/evidence/nuclei.json
+
+# Ingest Swagger / OpenAPI specification endpoints & parameters
+python3 pentest-skill/scripts/ingest_swagger.py $ENG/intel.json $ENG/evidence/openapi.json
 ```
 
-### 5. Calculate Ranked Next Steps
+### 5. Calculate Ranked Next Steps & Audit
 Query the heuristics engine to determine the highest-impact subsequent actions:
 
 ```bash
 python3 pentest-skill/scripts/next_steps.py $ENG/intel.json -n 5
+python3 pentest-skill/scripts/surface_audit.py $ENG/intel.json
 ```
 
-The engine balances technical vectors across skills to prevent infinite loops on a single endpoint.
+### 6. Generate Complete Security Assessment Report
+Compile an executive-ready Markdown report with CVSS severity distributions, asset tables, and finding writeups:
+
+```bash
+python3 pentest-skill/scripts/report_gen.py $ENG -o $ENG/report.md
+```
 
 ---
 
@@ -245,10 +259,15 @@ The engine balances technical vectors across skills to prevent infinite loops on
 
 | Script | Purpose | Key Arguments / Example |
 | :--- | :--- | :--- |
+| `pskill` | Unified master CLI dispatcher | `pskill <command> [options]` |
 | `scope.py` | Configures & manages `AUTHORIZATION.md` in one command | `quick-lab`, `quick-ctf`, `quick-bounty`, `set`, `show` |
 | `engagement_init.py` | Initializes new target engagement directory & JSON state | `--target <host> [--mode bounty\|vdp\|lab\|ctf] [--skill <skill>]` |
-| `intel.py` | Query & manipulate target state in `intel.json` | `intel.json <subcommand> [args]` (see subcommands below) |
+| `intel.py` | Query & manipulate target state in `intel.json` | `intel.json <subcommand> [args]` |
 | `append_evidence.py` | Appends structured row to `evidence.md` | `--skill <skill> --command "<cmd>" --result "<summary>"` |
+| `report_gen.py` | Compiles Markdown security assessment report | `<engagement_dir_or_intel> [-o <report_file>]` |
+| `ingest_httpx.py` | Parses httpx JSON probe data into `intel.json` | `<intel_json> <httpx_file>` |
+| `ingest_nuclei.py` | Ingests Nuclei vulnerability findings into `intel.json` | `<intel_json> <nuclei_file>` |
+| `ingest_swagger.py` | Parses OpenAPI / Swagger spec into endpoints & params | `<intel_json> <swagger_file> [--base-url <url>]` |
 | `ingest_ffuf.py` | Parses ffuf JSON output into `intel.json` endpoints | `<intel_json> <ffuf_json> [--base-url <url>]` |
 | `next_steps.py` | Heuristically scores and displays prioritized next actions | `<intel_json> [-n LIMIT] [--no-diversify] [--json]` |
 | `surface_audit.py` | Audits coverage gaps prior to completion gate | `<intel_json> [--json]` |
