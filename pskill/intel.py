@@ -149,8 +149,16 @@ def ingest_nmap(target: str, text: str) -> dict:
     for line in text.splitlines():
         m = re.search(r"Nmap scan report for (.+)$", line)
         if m:
-            host = m.group(1).strip()
-            _uniq(data.setdefault("hosts", []), host)
+            raw_host = m.group(1).strip()
+            host_match = re.match(r"^(\S+)\s*\(([^)]+)\)", raw_host)
+            if host_match:
+                host = host_match.group(1)
+                ip = host_match.group(2)
+                _uniq(data.setdefault("hosts", []), host)
+                _uniq(data.setdefault("hosts", []), ip)
+            else:
+                host = raw_host
+                _uniq(data.setdefault("hosts", []), host)
             data.setdefault("ports", {}).setdefault(host, [])
             continue
         m = re.search(r"^(\d+)/tcp\s+open\s+(\S+)\s*(.*)$", line)

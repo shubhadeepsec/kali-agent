@@ -12,21 +12,21 @@ ENG_DIR     = CONFIG_DIR / "engagements"
 HIST_FILE   = CONFIG_DIR / "history"
 
 DEFAULTS: dict[str, Any] = {
-    "api_provider": "",       # openai | anthropic | gemini | ollama
+    "api_provider": "",       # openai | anthropic | gemini | groq | ollama
     "api_key":      "",
     "model":        "",
     "theme":        "dark",   # dark | light
-    "auto_approve": False,    # auto-approve shell commands (like claude --dangerously-skip-permissions)
+    "auto_approve": False,    # auto-approve shell commands
     "max_tokens":   4096,
-    "scope_required": True,   # enforce AUTHORIZATION.md before running tools
+    "scope_required": True,   # enforce scope confirmation before running active tools
 }
 
 PROVIDER_DEFAULTS = {
     "openai":    {"model": "gpt-4o",                   "base_url": "https://api.openai.com/v1"},
     "anthropic": {"model": "claude-sonnet-4-5",        "base_url": "https://api.anthropic.com"},
-    "gemini":    {"model": "gemini-2.0-flash-exp",     "base_url": "https://generativelanguage.googleapis.com"},
-    "ollama":    {"model": "llama3.1",                 "base_url": "http://localhost:11434/v1"},
+    "gemini":    {"model": "gemini-2.0-flash-exp",     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"},
     "groq":      {"model": "llama-3.1-70b-versatile", "base_url": "https://api.groq.com/openai/v1"},
+    "ollama":    {"model": "llama3.1",                 "base_url": "http://localhost:11434/v1"},
 }
 
 
@@ -53,21 +53,27 @@ def save(cfg: dict[str, Any]) -> None:
 
 def get(key: str, fallback: Any = None) -> Any:
     cfg = load()
-    # env vars override config (like ANTHROPIC_API_KEY, OPENAI_API_KEY)
-    env_map = {
-        "api_key": {
-            "openai":    "OPENAI_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "gemini":    "GEMINI_API_KEY",
-            "groq":      "GROQ_API_KEY",
-        }
-    }
+    provider = cfg.get("api_provider", "")
+
+    # Check environment variable fallbacks
     if key == "api_key":
-        provider = cfg.get("api_provider", "")
-        env_key = env_map["api_key"].get(provider, "")
-        env_val = os.environ.get(env_key, "")
-        if env_val:
-            return env_val
+        env_map = {
+            "openai":    ["OPENAI_API_KEY"],
+            "anthropic": ["ANTHROPIC_API_KEY"],
+            "gemini":    ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+            "groq":      ["GROQ_API_KEY"],
+            "ollama":    [],
+        }
+        for env_var in env_map.get(provider, []):
+            val = os.environ.get(env_var, "")
+            if val:
+                return val
+        if provider == "ollama":
+            return "ollama"
+
+    if key == "model" and not cfg.get("model"):
+        return PROVIDER_DEFAULTS.get(provider, {}).get("model", fallback)
+
     return cfg.get(key, fallback)
 
 
@@ -79,7 +85,29 @@ def set_value(key: str, value: Any) -> None:
 
 def is_configured() -> bool:
     cfg = load()
-    return bool(cfg.get("api_provider") and (
-        cfg.get("api_key") or
-        os.environ.get(f"{cfg.get('api_provider','').upper()}_API_KEY", "")
-    ))
+    provider = cfg.get("api_provider", "")
+
+    if provider == "ollama":
+        return True
+
+    if provider:
+        api_key = get("api_key", "")
+        if api_key:
+            return True
+
+    # Auto-detect from environment if not yet configured
+    for p, env_keys in [
+        ("anthropic", ["ANTHROPIC_API_KEY"]),
+        ("openai",    ["OPENAI_API_KEY"]),
+        ("gemini",    ["GEMINI_API_KEY", "GOOGLE_API_KEY"]),
+        ("groq",      ["GROQ_API_KEY"]),
+    ]:
+        for k in env_keys:
+            if os.environ.get(k):
+                cfg["api_provider"] = p
+                cfg["api_key"] = os.environ[k]
+                cfg["model"] = PROVIDER_DEFAULTS[p]["model"]
+                save(cfg)
+                return True
+
+    return False
