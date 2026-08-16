@@ -1,28 +1,17 @@
-# Active scope file — may contain program URLs, targets, account notes
-AUTHORIZATION.md
-
-# Engagement data lives in ~/.pskill/ (not in the repo)
+# pskill — user config and engagement data
 ~/.pskill/
-
-# Legacy path (keep template only)
-pentest-skill/engagement/*
-!pentest-skill/engagement/_template/
-!pentest-skill/engagement/_template/**
 
 # Python cache
 __pycache__/
 *.py[cod]
-*$py.class
-.pytest_cache/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
 
-# OS / editor
+# OS
 .DS_Store
 Thumbs.db
 *.swp
-*.swo
-.idea/
 .vscode/
-*.code-workspace
+.idea/
