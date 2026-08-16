@@ -836,9 +836,14 @@ def run() -> None:
 
         # Natural language interaction
         console.print()
+        def _stream_update(msg: str) -> None:
+            if msg.startswith("\n[Running tool:"):
+                tool_name = msg.replace("\n[Running tool:", "").replace("]", "").strip()
+                console.print(f"  [bold cyan]⚡ Executing tool:[/] [yellow]{tool_name}[/]…")
+
         with Live(Spinner("dots", text="[red dim]thinking…[/]"), refresh_per_second=20, transient=True):
             try:
-                res = agent.chat(line, confirm_fn=_confirm_command)
+                res = agent.chat(line, confirm_fn=_confirm_command, stream_fn=_stream_update)
             except Exception as e:
                 console.print(f"[red]Agent error: {e}[/]")
                 if "api_key" in str(e).lower() or "auth" in str(e).lower():
