@@ -1,0 +1,40 @@
+# Task Routing — Senior Coverage
+
+Match to **one** primary skill. Chain others via `next_steps.py`. See [`shared/attack-surface.md`](../shared/attack-surface.md).
+
+| Task type | Keywords | Skill |
+|-----------|----------|-------|
+| Subdomain, port, dir recon | nmap, ffuf, subdomain, fingerprint | `web-recon` |
+| IDOR, BOLA, BFLA | IDOR, object reference, horizontal, vertical | `idor-bola` |
+| REST/GraphQL API | API, swagger, graphql, JWT, mass assignment | `api-testing` |
+| JS reverse | bundle, obfuscation, sourcemap, webpack | `js-reverse` |
+| APK static | jadx, apktool, manifest, secrets | `apk-reverse` |
+| Mobile runtime | Frida, SSL pinning, root detection | `mobile-advanced` |
+| Binary / pwn | ELF, crackme, radare2, Ghidra, ROP | `binary-reverse` |
+| SQLi, SSTI, XXE, CMDi | injection, sqli, ssti, xxe, deserialize | `injection` |
+| Smuggling, cache, Host | CL.TE, cache poison, Host header, 403 bypass | `http-advanced` |
+| SSRF | url=, fetch, webhook, metadata | `ssrf` |
+| OAuth, session | OAuth, OIDC, login, session fixation | `oauth-auth` |
+| Business logic | checkout, cart, coupon, workflow | `business-logic` |
+| Cloud | S3, amazonaws, AKIA, azure blob | `cloud-security` |
+| AD / internal | kerberos, bloodhound, 445, 389, 88 | `ad-pentest` |
+| Post-exploit | shell, privesc, pivot, cred reuse | `post-exploit` |
+| AI / LLM endpoints | prompt injection, llm, chatbot, agent, rag | `ai-llm-security` |
+| Reporting | write-up, disclosure, PoC | `reporting` |
+
+## Overlap → chain order
+
+1. `web-recon` → populate intel  
+2. `js-reverse` / `apk-reverse` → hidden endpoints  
+3. `api-testing` + `oauth-auth`  
+4. `injection` + `idor-bola` + `ssrf` on every param class  
+5. `http-advanced` if proxy/cache  
+6. `business-logic` on workflows  
+7. `cloud-security` / `ad-pentest` / `post-exploit` by signal  
+8. `surface_audit` → `reporting`
+
+## Before routing
+
+1. [`AUTHORIZATION.md`](AUTHORIZATION.md)  
+2. `engagement/<target>/intel.json`  
+3. [`shared/senior-operator.md`](../shared/senior-operator.md)

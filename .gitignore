@@ -1,21 +1,22 @@
-# Local scope — may contain program URLs, targets, account notes
-pentest-skill/AUTHORIZATION.md
+# Active scope file — may contain program URLs, targets, account notes
+AUTHORIZATION.md
 
-# Engagement intel, evidence, creds — per-target local state
+# Engagement data lives in ~/.pskill/ (not in the repo)
+~/.pskill/
+
+# Legacy path (keep template only)
 pentest-skill/engagement/*
 !pentest-skill/engagement/_template/
 !pentest-skill/engagement/_template/**
-
-# Field journal entries may contain sensitive findings
-pentest-skill/field-journal/*
-!pentest-skill/field-journal/_template.md
-!pentest-skill/field-journal/_index.md
 
 # Python cache
 __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+*.egg-info/
+dist/
+build/
 
 # OS / editor
 .DS_Store

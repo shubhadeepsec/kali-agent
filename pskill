@@ -1,0 +1,617 @@
+#!/usr/bin/env python3
+"""
+pskill — Autonomous hacking & pentesting CLI with interactive TUI.
+Like Claude Code, but for authorized security work.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+# ── Rich TUI ──────────────────────────────────────────────────────────────────
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+    from rich.syntax import Syntax
+    from rich.prompt import Prompt, Confirm
+    from rich.live import Live
+    from rich.spinner import Spinner
+    from rich.columns import Columns
+    from rich import box
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.history import FileHistory
+    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+    from prompt_toolkit.styles import Style
+    from prompt_toolkit.completion import WordCompleter
+    HAS_RICH = True
+except ImportError:
+    HAS_RICH = False
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+ROOT       = Path(__file__).resolve().parent
+SCRIPTS    = ROOT / "src" / "pskill"
+PLAYBOOKS  = ROOT / "playbooks"
+AUTH_FILE  = ROOT / "AUTHORIZATION.md"
+ENG_BASE   = Path.home() / ".pskill" / "engagements"
+HIST_FILE  = Path.home() / ".pskill" / "history"
+CFG_FILE   = Path.home() / ".pskill" / "config.json"
+ENG_BASE.mkdir(parents=True, exist_ok=True)
+HIST_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+console = Console(highlight=False) if HAS_RICH else None
+
+# ── Branding ──────────────────────────────────────────────────────────────────
+LOGO = r"""
+  ██████╗ ███████╗██╗  ██╗██╗██╗     ██╗
+  ██╔══██╗██╔════╝██║ ██╔╝██║██║     ██║
+  ██████╔╝███████╗█████╔╝ ██║██║     ██║
+  ██╔═══╝ ╚════██║██╔═██╗ ██║██║     ██║
+  ██║     ███████║██║  ██╗██║███████╗███████╗
+  ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝
+"""
+
+VERSION = "2.0.0"
+
+COMMANDS = {
+    "scope"          : "Set or show authorization scope",
+    "init"           : "Initialize new engagement for a target",
+    "intel"          : "View or update target intelligence",
+    "next"           : "Get AI-ranked next pentesting steps",
+    "audit"          : "Audit attack surface coverage",
+    "log"            : "Log evidence for an action",
+    "report"         : "Generate Markdown security report",
+    "ingest"         : "Ingest tool output (nmap/httpx/nuclei/ffuf/swagger)",
+    "playbook"       : "Open a skill playbook (web-recon, api-testing…)",
+    "engagements"    : "List all engagements",
+    "help"           : "Show help",
+    "exit"           : "Exit pskill",
+}
+
+SKILLS = [
+    "web-recon","api-testing","idor-bola","injection","http-advanced",
+    "ssrf","oauth-auth","business-logic","js-reverse","apk-reverse",
+    "mobile-advanced","binary-reverse","cloud-security","ad-pentest",
+    "post-exploit","ai-llm-security","reporting",
+]
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def slugify(s: str) -> str:
+    s = re.sub(r"https?://", "", s.strip().lower())
+    return re.sub(r"[^a-z0-9._-]+", "-", s).strip("-") or "target"
+
+def load_intel(target: str) -> dict:
+    path = ENG_BASE / slugify(target) / "intel.json"
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text())
+
+def save_intel(target: str, intel: dict) -> None:
+    path = ENG_BASE / slugify(target) / "intel.json"
+    intel["updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    path.write_text(json.dumps(intel, indent=2) + "\n")
+
+def eng_path(target: str) -> Path:
+    return ENG_BASE / slugify(target)
+
+def run_script(script: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(script), *args],
+                          capture_output=False, text=True)
+
+# ── Print helpers ─────────────────────────────────────────────────────────────
+
+def print_banner() -> None:
+    if not HAS_RICH:
+        print(LOGO)
+        return
+    console.print(Text(LOGO, style="bold red"))
+    console.print(
+        Panel.fit(
+            f"[bold white]v{VERSION}[/]  [dim]|[/]  "
+            "[red]Autonomous Hacking & Pentesting CLI[/]  [dim]|[/]  "
+            "[dim]Authorized targets only[/]",
+            border_style="red",
+            padding=(0, 2),
+        )
+    )
+    console.print()
+
+def print_help() -> None:
+    if not HAS_RICH:
+        for k, v in COMMANDS.items():
+            print(f"  {k:<16} {v}")
+        return
+
+    table = Table(box=box.SIMPLE_HEAD, show_header=True, header_style="bold red",
+                  border_style="dim", padding=(0, 2))
+    table.add_column("Command", style="bold yellow", no_wrap=True, min_width=14)
+    table.add_column("Description", style="white")
+    for cmd, desc in COMMANDS.items():
+        table.add_row(cmd, desc)
+
+    console.print(Panel(table, title="[bold red]pskill commands[/]",
+                         border_style="red", padding=(1, 2)))
+
+def ok(msg: str) -> None:
+    if HAS_RICH:
+        console.print(f"[bold green]✓[/] [green]{msg}[/]")
+    else:
+        print(f"✓ {msg}")
+
+def err(msg: str) -> None:
+    if HAS_RICH:
+        console.print(f"[bold red]✗[/] [red]{msg}[/]")
+    else:
+        print(f"✗ {msg}", file=sys.stderr)
+
+def info(msg: str) -> None:
+    if HAS_RICH:
+        console.print(f"[bold cyan]→[/] [cyan]{msg}[/]")
+    else:
+        print(f"→ {msg}")
+
+def warn(msg: str) -> None:
+    if HAS_RICH:
+        console.print(f"[bold yellow]⚠[/] [yellow]{msg}[/]")
+    else:
+        print(f"⚠ {msg}")
+
+def spinner(msg: str) -> "Live | None":
+    if HAS_RICH:
+        return Live(Spinner("dots", text=f"[cyan]{msg}[/]"), refresh_per_second=20)
+    print(f"… {msg}")
+    return None
+
+# ── Commands ──────────────────────────────────────────────────────────────────
+
+def cmd_scope(args: list[str]) -> None:
+    """pskill scope [show | quick-lab | quick-ctf | quick-bounty | set]"""
+    script = ROOT / "pentest-skill" / "scripts" / "scope.py"
+    if not script.exists():
+        err("scope.py not found"); return
+    if not args:
+        args = ["show"]
+    run_script(script, *args)
+
+def cmd_init(args: list[str]) -> None:
+    """Initialize engagement → stores in ~/.pskill/engagements/<slug>/"""
+    if not args:
+        if HAS_RICH:
+            target = Prompt.ask("[bold yellow]Target[/] (hostname/IP/domain)")
+            mode   = Prompt.ask("[bold yellow]Mode[/]", choices=["bounty","vdp","lab","ctf"], default="bounty")
+            skill  = Prompt.ask("[bold yellow]Primary skill[/]", default="web-recon")
+        else:
+            target = input("Target: ")
+            mode = input("Mode [bounty]: ") or "bounty"
+            skill = input("Primary skill [web-recon]: ") or "web-recon"
+    else:
+        # parse --target / --mode / --skill
+        import argparse
+        p = argparse.ArgumentParser()
+        p.add_argument("--target", required=True)
+        p.add_argument("--mode", default="bounty")
+        p.add_argument("--skill", default="web-recon")
+        ns, _ = p.parse_known_args(args)
+        target, mode, skill = ns.target, ns.mode, ns.skill
+
+    slug = slugify(target)
+    dest = ENG_BASE / slug
+    if dest.exists():
+        warn(f"Engagement already exists: {dest}")
+        return
+
+    # Copy template
+    template = ROOT / "pentest-skill" / "engagement" / "_template"
+    if template.exists():
+        shutil.copytree(template, dest)
+    else:
+        dest.mkdir(parents=True)
+        (dest / "evidence.md").write_text(f"# Evidence — {target}\n\n")
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        base_intel = {
+            "target": target, "mode": mode, "primary_skill": skill,
+            "updated": now, "hosts": [], "ports": {}, "services": [],
+            "endpoints": [], "tech": [], "params": [], "vulns": [],
+            "done": [], "blocked": [], "notes": [f"Initialized {now}"], "waf": ""
+        }
+        (dest / "intel.json").write_text(json.dumps(base_intel, indent=2) + "\n")
+
+    # Patch intel.json
+    intel_path = dest / "intel.json"
+    intel = json.loads(intel_path.read_text())
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    intel.update({"target": target, "mode": mode, "primary_skill": skill,
+                  "updated": now, "notes": [f"Engagement initialized {now}"]})
+    intel_path.write_text(json.dumps(intel, indent=2) + "\n")
+
+    ok(f"Engagement ready: [bold]{dest}[/]" if HAS_RICH else f"Engagement ready: {dest}")
+    info(f"intel.json → {intel_path}")
+
+def cmd_intel(args: list[str]) -> None:
+    """View or update target intelligence."""
+    if not args:
+        # interactive: list engagements and pick one
+        engs = list(ENG_BASE.iterdir()) if ENG_BASE.exists() else []
+        if not engs:
+            warn("No engagements found. Run: pskill init"); return
+        if HAS_RICH:
+            console.print("[bold yellow]Available engagements:[/]")
+            for i, e in enumerate(engs):
+                console.print(f"  [{i+1}] {e.name}")
+            target = Prompt.ask("Select target name")
+        else:
+            target = input("Target: ")
+    elif args[0] in ("--target", "-t"):
+        target = args[1]; args = args[2:]
+    else:
+        target = args[0]; args = args[1:]
+
+    intel = load_intel(target)
+    if not intel:
+        err(f"No intel.json for target '{target}'"); return
+
+    if not args:
+        _show_intel(target, intel)
+    else:
+        # delegate to intel.py script
+        script = ROOT / "pentest-skill" / "scripts" / "intel.py"
+        intel_file = eng_path(target) / "intel.json"
+        run_script(script, str(intel_file), *args)
+
+def _show_intel(target: str, intel: dict) -> None:
+    if not HAS_RICH:
+        print(json.dumps(intel, indent=2)); return
+
+    grid = Table.grid(padding=(0, 2))
+    grid.add_column(style="bold dim", no_wrap=True)
+    grid.add_column()
+
+    grid.add_row("Target",  f"[bold white]{intel.get('target','?')}[/]")
+    grid.add_row("Mode",    f"[cyan]{intel.get('mode','?')}[/]")
+    grid.add_row("Skill",   f"[yellow]{intel.get('primary_skill','?')}[/]")
+    grid.add_row("Updated", f"[dim]{intel.get('updated','?')}[/]")
+    if intel.get("waf"):
+        grid.add_row("WAF/CDN", f"[red]{intel['waf']}[/]")
+
+    def _list_section(title: str, items: list, style: str = "white") -> str:
+        if not items: return "[dim]—[/]"
+        return "\n".join(f"[{style}]• {i}[/]" for i in items[:10])
+
+    grid.add_row("Hosts",     _list_section("Hosts",     intel.get("hosts", []),     "green"))
+    grid.add_row("Endpoints", _list_section("Endpoints", intel.get("endpoints", []), "blue"))
+    grid.add_row("Tech",      _list_section("Tech",      intel.get("tech", []),      "magenta"))
+
+    vulns = intel.get("vulns", [])
+    sev_color = {"critical":"bold red","high":"red","medium":"yellow","low":"green","info":"dim"}
+    vuln_lines = "\n".join(
+        f"[{sev_color.get(v.get('severity','info'),'white')}]• [{v.get('severity','?').upper()}] {v.get('title','?')}[/]"
+        for v in vulns[:10]
+    ) if vulns else "[dim]—[/]"
+    grid.add_row("Vulns", vuln_lines)
+
+    grid.add_row("Done",    f"[dim]{len(intel.get('done',[]))} actions[/]")
+
+    console.print(Panel(grid, title=f"[bold red]Intel — {target}[/]",
+                         border_style="red", padding=(1, 2)))
+
+def cmd_next(args: list[str]) -> None:
+    """Get heuristic next steps."""
+    target = _resolve_target(args)
+    if not target: return
+    script = ROOT / "pentest-skill" / "scripts" / "next_steps.py"
+    intel_file = eng_path(target) / "intel.json"
+    ctx = spinner(f"Ranking next steps for [bold]{target}[/]…")
+    if ctx:
+        with ctx:
+            result = subprocess.run([sys.executable, str(script), str(intel_file), "-n", "7"],
+                                    capture_output=True, text=True)
+    else:
+        result = subprocess.run([sys.executable, str(script), str(intel_file), "-n", "7"],
+                                capture_output=True, text=True)
+    if result.returncode == 0:
+        if HAS_RICH:
+            console.print(Panel(result.stdout.strip(), title="[bold red]Next Steps[/]",
+                                 border_style="yellow", padding=(1, 2)))
+        else:
+            print(result.stdout)
+    else:
+        err(result.stderr)
+
+def cmd_audit(args: list[str]) -> None:
+    """Surface coverage audit."""
+    target = _resolve_target(args)
+    if not target: return
+    script = ROOT / "pentest-skill" / "scripts" / "surface_audit.py"
+    intel_file = eng_path(target) / "intel.json"
+    result = subprocess.run([sys.executable, str(script), str(intel_file)],
+                            capture_output=True, text=True)
+    if HAS_RICH:
+        style = "red" if "CRITICAL" in result.stdout else "yellow"
+        console.print(Panel(result.stdout.strip(), title="[bold red]Surface Audit[/]",
+                             border_style=style, padding=(1, 2)))
+    else:
+        print(result.stdout)
+
+def cmd_report(args: list[str]) -> None:
+    """Generate report."""
+    target = _resolve_target(args)
+    if not target: return
+    script = ROOT / "pentest-skill" / "scripts" / "report_gen.py"
+    epath = eng_path(target)
+    out = epath / "report.md"
+    ctx = spinner(f"Compiling report for [bold]{target}[/]…")
+    if ctx:
+        with ctx:
+            result = subprocess.run([sys.executable, str(script), str(epath), "-o", str(out)],
+                                    capture_output=True, text=True)
+    else:
+        result = subprocess.run([sys.executable, str(script), str(epath), "-o", str(out)],
+                                capture_output=True, text=True)
+    if result.returncode == 0:
+        ok(f"Report saved → {out}")
+    else:
+        err(result.stderr or "Report generation failed")
+
+def cmd_log(args: list[str]) -> None:
+    """Log evidence row."""
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--target", required=True)
+    p.add_argument("--skill",   required=True)
+    p.add_argument("--command", required=True)
+    p.add_argument("--result",  required=True)
+    p.add_argument("--notes", default="")
+    ns, _ = p.parse_known_args(args)
+    script = ROOT / "pentest-skill" / "scripts" / "append_evidence.py"
+    ev_file = eng_path(ns.target) / "evidence.md"
+    run_script(script, str(ev_file), "--skill", ns.skill,
+               "--command", ns.command, "--result", ns.result,
+               *(["--notes", ns.notes] if ns.notes else []))
+    ok("Evidence logged")
+
+def cmd_ingest(args: list[str]) -> None:
+    """Ingest tool output."""
+    if len(args) < 3:
+        info("Usage: ingest <target> <nmap|httpx|nuclei|ffuf|swagger> <file>"); return
+    target, tool_type, file_path = args[0], args[1], args[2]
+    intel_file = eng_path(target) / "intel.json"
+    if not intel_file.exists():
+        err(f"No engagement for '{target}'. Run: init --target {target}"); return
+
+    script_map = {
+        "nmap":    (ROOT / "pentest-skill" / "scripts" / "intel.py",        [str(intel_file), "ingest-nmap", file_path]),
+        "ffuf":    (ROOT / "pentest-skill" / "scripts" / "ingest_ffuf.py",  [str(intel_file), file_path]),
+        "httpx":   (ROOT / "pentest-skill" / "scripts" / "ingest_httpx.py", [str(intel_file), file_path]),
+        "nuclei":  (ROOT / "pentest-skill" / "scripts" / "ingest_nuclei.py",[str(intel_file), file_path]),
+        "swagger": (ROOT / "pentest-skill" / "scripts" / "ingest_swagger.py",[str(intel_file), file_path]),
+    }
+    if tool_type not in script_map:
+        err(f"Unknown tool type: {tool_type}"); return
+
+    script, run_args = script_map[tool_type]
+    ctx = spinner(f"Ingesting [bold]{tool_type}[/] output…")
+    if ctx:
+        with ctx:
+            result = subprocess.run([sys.executable, str(script), *run_args],
+                                    capture_output=True, text=True)
+    else:
+        result = subprocess.run([sys.executable, str(script), *run_args],
+                                capture_output=True, text=True)
+    if result.returncode == 0:
+        ok(f"Ingested {tool_type} output into intel.json")
+    else:
+        err(result.stderr)
+
+def cmd_playbook(args: list[str]) -> None:
+    """Show or browse a skill playbook."""
+    if not args:
+        if HAS_RICH:
+            table = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
+            table.add_column(style="bold yellow", no_wrap=True)
+            table.add_column(style="dim")
+            for i, s in enumerate(SKILLS, 1):
+                table.add_row(s, f"[dim]playbook {s}[/]")
+            console.print(Panel(table, title="[bold red]Available Playbooks[/]", border_style="red"))
+            skill = Prompt.ask("[bold yellow]Skill[/]", choices=SKILLS)
+        else:
+            print("\n".join(f"  {s}" for s in SKILLS))
+            skill = input("Skill: ").strip()
+    else:
+        skill = args[0]
+
+    md_path = PLAYBOOKS / skill / "SKILL.md"
+    if not md_path.exists():
+        md_path = ROOT / "pentest-skill" / "skills" / skill / "SKILL.md"
+    if not md_path.exists():
+        err(f"Playbook not found: {skill}"); return
+
+    content = md_path.read_text()
+    if HAS_RICH:
+        console.print(Syntax(content, "markdown", theme="monokai",
+                              word_wrap=True, background_color="default"))
+    else:
+        print(content)
+
+def cmd_engagements(_: list[str]) -> None:
+    """List all engagements."""
+    engs = sorted(ENG_BASE.iterdir()) if ENG_BASE.exists() else []
+    if not engs:
+        warn("No engagements yet. Run: pskill init"); return
+    if not HAS_RICH:
+        for e in engs: print(f"  {e.name}")
+        return
+
+    table = Table(box=box.SIMPLE_HEAD, header_style="bold red", border_style="dim", padding=(0,2))
+    table.add_column("Target", style="bold white")
+    table.add_column("Mode",   style="cyan")
+    table.add_column("Skill",  style="yellow")
+    table.add_column("Vulns",  style="red")
+    table.add_column("Updated", style="dim")
+
+    for e in engs:
+        ip = e / "intel.json"
+        if not ip.exists(): continue
+        try:
+            d = json.loads(ip.read_text())
+            table.add_row(
+                d.get("target", e.name),
+                d.get("mode","?"),
+                d.get("primary_skill","?"),
+                str(len(d.get("vulns",[]))),
+                d.get("updated","?")[:10],
+            )
+        except Exception:
+            table.add_row(e.name, "?", "?", "?", "?")
+
+    console.print(Panel(table, title="[bold red]Engagements[/]", border_style="red", padding=(1,2)))
+
+# ── Target resolver ───────────────────────────────────────────────────────────
+
+def _resolve_target(args: list[str]) -> str | None:
+    if args:
+        return args[0]
+    engs = list(ENG_BASE.iterdir()) if ENG_BASE.exists() else []
+    if not engs:
+        warn("No engagements. Run: pskill init"); return None
+    if len(engs) == 1:
+        return engs[0].name
+    if HAS_RICH:
+        for i, e in enumerate(engs, 1):
+            console.print(f"  [bold yellow]{i}[/] {e.name}")
+        choice = Prompt.ask("Select target")
+        try:
+            return engs[int(choice)-1].name
+        except Exception:
+            return choice
+    else:
+        for i, e in enumerate(engs, 1): print(f"  {i}. {e.name}")
+        choice = input("Select: ")
+        try: return engs[int(choice)-1].name
+        except Exception: return choice
+
+# ── REPL ──────────────────────────────────────────────────────────────────────
+
+DISPATCH = {
+    "scope":       cmd_scope,
+    "init":        cmd_init,
+    "intel":       cmd_intel,
+    "next":        cmd_next,
+    "audit":       cmd_audit,
+    "log":         cmd_log,
+    "report":      cmd_report,
+    "ingest":      cmd_ingest,
+    "playbook":    cmd_playbook,
+    "engagements": cmd_engagements,
+}
+
+def run_command_str(line: str) -> None:
+    parts = line.strip().split()
+    if not parts: return
+    cmd, args = parts[0].lower(), parts[1:]
+    if cmd in ("exit", "quit", "q"):
+        raise SystemExit(0)
+    if cmd in ("help", "?"):
+        print_help(); return
+    if cmd in DISPATCH:
+        DISPATCH[cmd](args)
+    else:
+        err(f"Unknown command: [bold]{cmd}[/]  — type [yellow]help[/] for commands" if HAS_RICH
+            else f"Unknown command: {cmd}  — type 'help'")
+
+def interactive_repl() -> None:
+    """Claude Code-style interactive REPL."""
+    print_banner()
+
+    if not HAS_RICH:
+        while True:
+            try:
+                line = input("pskill › ").strip()
+                if line: run_command_str(line)
+            except (EOFError, KeyboardInterrupt):
+                print(); break
+        return
+
+    # Status bar
+    scope_ok = AUTH_FILE.exists() and "Confirmed in-scope? | yes" in AUTH_FILE.read_text()
+    scope_txt = "[green]● scope OK[/]" if scope_ok else "[red]● no scope[/]"
+    eng_count = len(list(ENG_BASE.iterdir())) if ENG_BASE.exists() else 0
+    console.print(
+        Panel(
+            f"{scope_txt}   [dim]|[/]   [cyan]{eng_count} engagements[/]   [dim]|[/]   "
+            "[dim]type [bold white]help[/] for commands, [bold white]exit[/] to quit[/]",
+            border_style="dim",
+            padding=(0, 2),
+        )
+    )
+    console.print()
+
+    # prompt_toolkit session
+    completer = WordCompleter(list(COMMANDS.keys()) + SKILLS, ignore_case=True)
+    style = Style.from_dict({
+        "prompt":    "ansired bold",
+        "": "ansiwhite",
+    })
+    session: PromptSession = PromptSession(
+        history=FileHistory(str(HIST_FILE)),
+        auto_suggest=AutoSuggestFromHistory(),
+        completer=completer,
+        style=style,
+    )
+
+    while True:
+        try:
+            line = session.prompt(
+                [("class:prompt", " pskill "), ("", " › "), ("", " ")],
+            ).strip()
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[dim]bye.[/]"); break
+        if not line:
+            continue
+        try:
+            run_command_str(line)
+        except SystemExit:
+            console.print("[dim]bye.[/]"); break
+        except Exception as exc:
+            err(f"Unexpected error: {exc}")
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+def main() -> int:
+    args = sys.argv[1:]
+
+    # No args → interactive REPL
+    if not args:
+        interactive_repl()
+        return 0
+
+    cmd = args[0].lower()
+    rest = args[1:]
+
+    if cmd in ("-h", "--help", "help"):
+        print_banner()
+        print_help()
+        return 0
+
+    if cmd in DISPATCH:
+        try:
+            DISPATCH[cmd](rest)
+        except Exception as exc:
+            err(str(exc))
+            return 1
+        return 0
+
+    err(f"Unknown command: {cmd}  —  run [bold]pskill help[/]" if HAS_RICH else f"Unknown: {cmd}")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
