@@ -13,10 +13,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from pskill import config, intel, jobs, planner
-from pskill.agent import Agent, _format_openai_messages, _format_anthropic_messages
-from pskill.report_html import generate_html_report
-from pskill.tools import (
+from kali_agent import config, intel, jobs, planner
+from kali_agent.agent import Agent, _format_openai_messages, _format_anthropic_messages
+from kali_agent.report_html import generate_html_report
+from kali_agent.tools import (
     execute_tool,
     run_shell,
     search_exploits,

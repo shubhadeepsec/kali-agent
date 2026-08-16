@@ -18,8 +18,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "kali-agent=pskill.cli:run",
-            "pskill=pskill.cli:run",
+            "kali-agent=kali_agent.cli:run",
         ],
     },
     package_data={

@@ -5,5 +5,5 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from pskill.cli import run
+from kali_agent.cli import run
 sys.exit(run() or 0)
