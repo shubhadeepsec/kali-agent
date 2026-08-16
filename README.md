@@ -113,30 +113,61 @@ kali-agent[10.10.10.5] ❯ find all API endpoints and test for IDOR
 kali-agent[10.10.10.5] ❯ /report
 ```
 
+## ⚔️ Comparison: Kali Agent vs Others
+
+| Feature | **Kali Agent** 🤖 | **Claude Code** 💻 | **PentestGPT** 🔍 | **AutoGPT** ⚙️ |
+|:---|:---:|:---:|:---:|:---:|
+| **Specialized for Kali Linux & Pentesting** | ✅ **Yes** | ❌ (General Coding) | ⚠️ (Web only) | ❌ (General) |
+| **Native Exploit-DB (`searchsploit`)** | ✅ **Yes** | ❌ No | ❌ No | ❌ No |
+| **Reverse Shell & Listener Generator** | ✅ **Yes** | ❌ No | ❌ No | ❌ No |
+| **Background Job Manager (`/jobs`)** | ✅ **Yes** | ❌ No | ❌ No | ❌ No |
+| **Autonomous Multi-Step Planner (`/plan`)** | ✅ **Yes** | ⚠️ Partial | ⚠️ Partial | ⚠️ Buggy |
+| **Cyberpunk Dark HTML Reports** | ✅ **Yes** | ❌ No | ❌ No | ❌ No |
+| **Works with Offline Local LLMs (Ollama)** | ✅ **Yes** | ❌ (Anthropic only) | ❌ No | ⚠️ Partial |
+| **Free Cloud Models (Groq / Gemini)** | ✅ **Yes** | ❌ No | ❌ No | ❌ No |
+| **17 Senior Pentest Playbooks** | ✅ **Yes** | ❌ No | ⚠️ Few | ❌ No |
+
 ---
 
-## Configuration
+## 🏗️ Architecture
 
-Config is stored in `~/.pskill/config.json`. Data lives in `~/.pskill/engagements/<target>/`.
-
-```json
-{
-  "api_provider": "anthropic",
-  "api_key": "sk-ant-...",
-  "model": "claude-sonnet-4-5",
-  "theme": "cyberpunk",
-  "auto_approve": false,
-  "max_tokens": 4096,
-  "scope_required": true,
-  "stream_output": true,
-  "track_tokens": true
-}
+```
+                       ┌─────────────────────────┐
+                       │   Terminal / TUI REPL   │
+                       └────────────┬────────────┘
+                                    │
+                                    ▼
+                       ┌─────────────────────────┐
+                       │   Autonomous Agent Loop │
+                       │    (ReAct Controller)   │
+                       └──────┬───────────┬──────┘
+                              │           │
+                 ┌────────────┴──┐     ┌──┴────────────┐
+                 │  State/Intel  │     │ LLM Providers │
+                 │  (intel.json) │     │ (Groq/Claude/ │
+                 └───────────────┘     │  Ollama/OpenAI│
+                                       └──────┬────────┘
+                                              │
+        ┌───────────────────┬─────────────────┼───────────────────┐
+        ▼                   ▼                 ▼                   ▼
+┌───────────────┐   ┌───────────────┐ ┌───────────────┐   ┌───────────────┐
+│ OS Execution  │   │ Exploit-DB    │ │ Background    │   │ Dark HTML     │
+│ (bash/nmap/   │   │ (searchsploit/│ │ Job Manager   │   │ Assessment    │
+│  msf/burp)    │   │  cve lookup)  │ │ (/jobs/tail)  │   │ Reports       │
+└───────────────┘   └───────────────┘ └───────────────┘   └───────────────┘
 ```
 
-`auto_approve: true` skips shell command confirmation prompts (like `claude --dangerously-skip-permissions`).
+---
+
+## ⭐ Star History
+
+If you find Kali Agent useful, please give it a star on GitHub! It helps the project grow.
+
+[![Star History Chart](https://api.star-history.com/svg?repos=shubhadeepsec/kali-agent&type=Date)](https://star-history.com/#shubhadeepsec/kali-agent&Date)
 
 ---
 
 ## License
 
-MIT
+MIT © [Kali Agent Contributors](https://github.com/shubhadeepsec/kali-agent)
+
