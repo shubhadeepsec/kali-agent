@@ -122,7 +122,15 @@ def test_tools():
         read_out = execute_tool("read_file", {"path": str(test_file)})
         assert read_out == "PSKILL_TEST_DATA"
 
-    print("  [✓] Tools tests passed")
+        # System diagnostics tool
+        sys_info = execute_tool("get_system_info", {})
+        assert "kernel" in sys_info or "os" in sys_info
+
+        # File search tool
+        find_out = execute_tool("find_files", {"path": tmpdir, "pattern": "test_out.txt"})
+        assert "test_out.txt" in find_out
+
+    print("  [✓] Tools & OS control tests passed")
 
 
 def test_message_formatting():

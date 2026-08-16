@@ -9,9 +9,10 @@
   ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝
 ```
 
-**AI-powered pentesting agent. Like Claude Code, but for hacking.**
+**Autonomous AI Agent for Kali Linux. Full OS control, security tool orchestration, and automated penetration testing.**
 
 [![Python](https://img.shields.io/badge/python-3.9+-red.svg)](https://python.org)
+[![Kali Linux](https://img.shields.io/badge/OS-Kali%20Linux-blue.svg)](https://www.kali.org)
 [![License](https://img.shields.io/badge/license-MIT-red.svg)](LICENSE)
 
 </div>
@@ -20,11 +21,16 @@
 
 ## What is pskill?
 
-`pskill` is an autonomous AI pentesting agent you run in your terminal. You bring your own API key (Anthropic, OpenAI, Gemini, Groq, or Ollama). It reasons about targets, runs tools, tracks findings, and chains the next move — like having a senior red teamer in your shell.
+`pskill` is an autonomous AI agent built for **Kali Linux**. It gives language models (Claude Sonnet, GPT-4o, Gemini 2.0 Flash, Llama 3.1) full terminal and OS-level control to:
+- 🖥️ **Control the whole Kali Linux OS**: Execute bash commands, manage systemd services, inspect network interfaces/listening sockets, monitor processes, and search the filesystem.
+- 🧰 **Orchestrate any security tool**: Native command chaining for Nmap, Metasploit, Burp Suite, Wireshark/tshark, Gobuster, ffuf, SQLMap, Hydra, Hashcat, John the Ripper, Ghidra, Impacket, and custom scripts.
+- 📦 **Auto-install missing dependencies**: Automatically checks for tools and installs them on the fly via `apt`, `pip`, `go`, `cargo`, or `git`.
+- 🧠 **Maintain persistent engagement state**: Automatically updates target `intel.json` with discovered hosts, ports, endpoints, technologies, and vulnerabilities.
+- 🛡️ **Senior security playbooks**: 17 specialized methodology playbooks loaded directly into agent memory.
 
 ```
 pskill
-  █ pskill[10.10.10.5] ❯ scan this machine and find web services
+  █ pskill[10.10.10.5] ❯ scan this target, enumerate web directories, and check for SQL injection
 ```
 
 The agent will:
