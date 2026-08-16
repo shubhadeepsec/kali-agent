@@ -295,6 +295,73 @@ python3 pentest-skill/scripts/intel.py $ENG/intel.json set-skill "idor-bola"
 
 ---
 
+## 🤖 Agentic Tool & MCP Server Integration
+
+Beyond prompt rules and CLI scripts, **Pentest-Skill** operates natively as an **Agentic Tool Server** using the standard **Model Context Protocol (MCP)** and Python SDK. This allows autonomous AI agents to invoke pentest methodology tools directly via structured function calling.
+
+### 1. Model Context Protocol (MCP) Server
+
+Connect Pentest-Skill to any MCP client (**Antigravity IDE**, **Claude Desktop**, **Cursor**, **Windsurf**):
+
+```json
+{
+  "mcpServers": {
+    "pentest-skill": {
+      "command": "python3",
+      "args": ["/path/to/pentest-skill/mcp/server.py"]
+    }
+  }
+}
+```
+
+#### Available Agent Tool Functions:
+
+| Tool Function | Description | Parameters |
+| :--- | :--- | :--- |
+| `pskill_check_scope` | Validates target authorization against `AUTHORIZATION.md` | `target: str` |
+| `pskill_set_scope` | Automatically configures scope records | `target, name, source, in_scope, mode` |
+| `pskill_init_engagement` | Creates target directory & state machine | `target, mode, primary_skill` |
+| `pskill_get_next_steps` | Returns prioritized next technical actions | `target, limit` |
+| `pskill_update_intel` | Updates intelligence (ports, tech, vulns) | `target, command, value, severity` |
+| `pskill_audit_surface` | Audits coverage checklist for critical gaps | `target` |
+| `pskill_log_evidence` | Appends record to `evidence.md` ledger | `target, skill, command_run, result` |
+| `pskill_ingest` | Parses outputs from Nmap, ffuf, httpx, Nuclei, Swagger | `target, tool_type, file_path` |
+| `pskill_generate_report` | Compiles Markdown security report | `target` |
+| `pskill_get_playbook` | Returns complete methodology markdown | `skill_name` |
+
+### 2. Python Agent SDK
+
+Integrate Pentest-Skill directly into your custom Python agents, LangChain, or OpenAI Function Calling pipelines:
+
+```python
+from pentest_skill.agent import PentestSkillAgent
+
+# Initialize Agent interface
+agent = PentestSkillAgent(default_target="app.example.com")
+
+# Check Scope
+scope = agent.check_scope()
+if not scope["authorized"]:
+    agent.set_scope(target="app.example.com", name="Acme Bounty", source="https://hackerone.com/acme")
+
+# Initialize engagement
+agent.init_engagement(mode="bounty", primary_skill="web-recon")
+
+# Query heuristic next steps
+next_actions = agent.get_next_steps(limit=3)
+print(next_actions)
+
+# Ingest tool output & update state
+agent.ingest(tool_type="httpx", file_path="evidence/httpx.json")
+agent.update_intel(command="add-vuln", value="IDOR on /invoices", severity="high")
+
+# Run coverage audit & compile report
+audit = agent.audit_surface()
+report_text = agent.generate_report()
+```
+
+---
+
 ## 🧰 Supported Tools & Environment
 
 Pentest-Skill integrates with standard security tooling available out of the box in **Kali Linux**, **Parrot OS**, or standard Linux/macOS security distributions.

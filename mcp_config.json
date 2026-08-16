@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "pentest-skill": {
+      "command": "python3",
+      "args": ["pentest-skill/mcp/server.py"],
+      "description": "Pentest-Skill Model Context Protocol (MCP) Server for automated scope, state machine, tool chaining, coverage audits, and report generation."
+    }
+  }
+}
