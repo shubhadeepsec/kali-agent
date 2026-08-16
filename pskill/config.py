@@ -6,19 +6,23 @@ import os
 from pathlib import Path
 from typing import Any
 
-CONFIG_DIR  = Path.home() / ".pskill"
-CONFIG_FILE = CONFIG_DIR / "config.json"
-ENG_DIR     = CONFIG_DIR / "engagements"
-HIST_FILE   = CONFIG_DIR / "history"
+CONFIG_DIR   = Path.home() / ".pskill"
+CONFIG_FILE  = CONFIG_DIR / "config.json"
+ENG_DIR      = CONFIG_DIR / "engagements"
+HIST_FILE    = CONFIG_DIR / "history"
+JOBS_DIR     = CONFIG_DIR / "jobs"
+SESSIONS_DIR = CONFIG_DIR / "sessions"
 
 DEFAULTS: dict[str, Any] = {
     "api_provider": "",       # openai | anthropic | gemini | groq | ollama
     "api_key":      "",
     "model":        "",
-    "theme":        "dark",   # dark | light
-    "auto_approve": False,    # auto-approve shell commands
+    "theme":        "cyberpunk", # cyberpunk | matrix | stealth | dark
+    "auto_approve": False,    # auto-approve shell commands (like claude --dangerously-skip-permissions)
     "max_tokens":   4096,
     "scope_required": True,   # enforce scope confirmation before running active tools
+    "stream_output": True,    # stream tool stdout line-by-line in terminal
+    "track_tokens": True,     # track session tokens and estimated cost
 }
 
 PROVIDER_DEFAULTS = {
@@ -29,10 +33,47 @@ PROVIDER_DEFAULTS = {
     "ollama":    {"model": "llama3.1",                 "base_url": "http://localhost:11434/v1"},
 }
 
+THEMES = {
+    "cyberpunk": {
+        "primary": "bold red",
+        "secondary": "bold cyan",
+        "accent": "yellow",
+        "border": "red",
+        "prompt_class": "ansired bold",
+        "dim": "dim cyan",
+    },
+    "matrix": {
+        "primary": "bold green",
+        "secondary": "bold bright_green",
+        "accent": "bright_white",
+        "border": "green",
+        "prompt_class": "ansigreen bold",
+        "dim": "dim green",
+    },
+    "stealth": {
+        "primary": "bold white",
+        "secondary": "bold dim",
+        "accent": "dim yellow",
+        "border": "dim",
+        "prompt_class": "ansiwhite bold",
+        "dim": "dim",
+    },
+    "dark": {
+        "primary": "bold magenta",
+        "secondary": "bold blue",
+        "accent": "yellow",
+        "border": "magenta",
+        "prompt_class": "ansimagenta bold",
+        "dim": "dim blue",
+    },
+}
+
 
 def ensure_dirs() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     ENG_DIR.mkdir(parents=True, exist_ok=True)
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def load() -> dict[str, Any]:
@@ -55,7 +96,6 @@ def get(key: str, fallback: Any = None) -> Any:
     cfg = load()
     provider = cfg.get("api_provider", "")
 
-    # Check environment variable fallbacks
     if key == "api_key":
         env_map = {
             "openai":    ["OPENAI_API_KEY"],
@@ -83,6 +123,12 @@ def set_value(key: str, value: Any) -> None:
     save(cfg)
 
 
+def get_theme_style() -> dict[str, str]:
+    cfg = load()
+    theme_name = cfg.get("theme", "cyberpunk")
+    return THEMES.get(theme_name, THEMES["cyberpunk"])
+
+
 def is_configured() -> bool:
     cfg = load()
     provider = cfg.get("api_provider", "")
@@ -95,7 +141,6 @@ def is_configured() -> bool:
         if api_key:
             return True
 
-    # Auto-detect from environment if not yet configured
     for p, env_keys in [
         ("anthropic", ["ANTHROPIC_API_KEY"]),
         ("openai",    ["OPENAI_API_KEY"]),

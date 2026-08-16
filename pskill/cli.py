@@ -1,10 +1,11 @@
-"""cli.py — Interactive Claude Code-style REPL and CLI interface for pskill."""
+"""cli.py — Interactive Claude Code-style REPL and CLI interface for Kali Agent v0.1.0."""
 from __future__ import annotations
 
 import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -24,13 +25,22 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.styles import Style as PTKStyle
 from prompt_toolkit.completion import WordCompleter
 
-from . import config, intel as intel_mod
+from . import config, intel as intel_mod, jobs as jobs_mod
 from .agent import Agent
-from .tools import SKILLS, PLAYBOOKS_DIR, run_shell
+from .planner import create_default_plan, render_plan_tree, Plan, Task
+from .report_html import generate_html_report
+from .tools import (
+    SKILLS,
+    PLAYBOOKS_DIR,
+    run_shell,
+    search_exploits,
+    get_network_info,
+    generate_payload,
+)
 
 console = Console()
 
-VERSION = "3.0.0"
+VERSION = "0.1.0"
 
 LOGO = """[bold red]
   ██╗  ██╗ █████╗ ██╗     ██╗     █████╗  ██████╗ ███████╗███╗   ██╗████████╗
@@ -41,12 +51,19 @@ LOGO = """[bold red]
   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝    ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   [/bold red]"""
 
 SLASH_CMDS = {
-    "/scope":       "Set or confirm authorization scope (lab, ctf, bounty)",
+    "/scope":       "Set or confirm target authorization (lab, ctf, bounty)",
+    "/plan":        "Draft and execute an autonomous multi-step pentest plan",
     "/init":        "Initialize a new engagement target & workspace",
     "/intel":       "Show target intelligence dashboard (hosts, ports, vulns)",
     "/playbook":    "Load a domain skill playbook into agent context",
-    "/engagements": "List all saved engagements and findings summary",
-    "/report":      "Compile and save Markdown penetration testing report",
+    "/jobs":        "List and monitor running background processes & scans",
+    "/attach":      "Tail live log output from a background job (/attach <id>)",
+    "/kill":        "Terminate an active background job (/kill <id>)",
+    "/revshell":    "Generate reverse shell one-liners & netcat listeners",
+    "/searchsploit":"Query local Exploit-DB and CVE vulnerability database",
+    "/sessions":    "List or resume previous assessment sessions",
+    "/report":      "Compile Markdown and Cyberpunk Dark HTML reports",
+    "/theme":       "Switch terminal theme (cyberpunk, matrix, stealth, dark)",
     "/config":      "View or update AI provider, API keys, and settings",
     "/target":      "Switch active target context",
     "/run":         "Execute a shell command directly",
@@ -63,7 +80,7 @@ def setup_wizard() -> None:
     """Interactive first-run config — similar to Claude Code's onboarding."""
     console.print()
     console.print(Panel(
-        "[bold white]Welcome to Kali Agent![/]\n\n"
+        "[bold white]Welcome to Kali Agent v0.1.0![/]\n\n"
         "Configure your AI provider. You can use an API key from any of:\n"
         "  • [cyan]Anthropic[/] (claude-sonnet-4-5) — [dim]https://console.anthropic.com[/]\n"
         "  • [cyan]OpenAI[/] (gpt-4o) — [dim]https://platform.openai.com[/]\n"
@@ -114,6 +131,200 @@ def setup_wizard() -> None:
 
 # ── Slash command handlers ────────────────────────────────────────────────────
 
+def handle_plan(args: list[str], agent: Agent) -> None:
+    target = agent.current_target or "Target"
+    goal = " ".join(args) if args else f"Comprehensive penetration testing assessment on {target}"
+
+    plan = create_default_plan(goal, target)
+    console.print()
+    console.print(render_plan_tree(plan))
+
+    start = Confirm.ask("[bold yellow]Execute autonomous plan phases now?[/]", default=True)
+    if not start:
+        return
+
+    for t in plan.tasks:
+        t.status = "running"
+        console.print(f"\n[bold yellow]▶ Phase {t.id}: {t.title}[/] [dim]({t.skill})[/]")
+        step_prompt = (
+            f"AUTONOMOUS PHASE {t.id}: {t.title}\n"
+            f"Goal: {t.description}\n"
+            f"Target: {plan.target}\n"
+            f"Active Playbook: {t.skill}\n"
+            "Execute necessary reconnaissance, surface discovery, or security checks. Update intel with findings."
+        )
+
+        with Live(Spinner("dots", text=f"[cyan]Executing Phase {t.id}: {t.title}…[/]"), refresh_per_second=20, transient=True):
+            try:
+                res = agent.chat(step_prompt, confirm_fn=_confirm_command)
+                t.output = res
+                t.status = "completed"
+                console.print(f"[bold green]✓ Phase {t.id} completed.[/]")
+            except Exception as e:
+                t.status = "failed"
+                t.error = str(e)
+                console.print(f"[bold red]✗ Phase {t.id} encountered error: {e}[/]")
+
+    console.print("\n[bold green]✓ All plan execution phases processed.[/]")
+    console.print(render_plan_tree(plan))
+
+
+def handle_jobs(args: list[str], agent: Agent) -> None:
+    jobs_list = jobs_mod.list_jobs()
+    if not jobs_list:
+        console.print("[dim]No background jobs active or recorded.[/]")
+        return
+
+    table = Table(box=box.SIMPLE_HEAD, header_style="bold red", border_style="dim", padding=(0, 2))
+    table.add_column("Job ID", style="yellow", no_wrap=True)
+    table.add_column("PID", style="cyan", width=8)
+    table.add_column("Status", style="bold white")
+    table.add_column("Command", style="white")
+    table.add_column("Started", style="dim")
+
+    status_styles = {
+        "running": "[bold green]RUNNING[/]",
+        "finished": "[dim]FINISHED[/]",
+        "killed": "[bold red]KILLED[/]",
+    }
+
+    for j in jobs_list:
+        st = status_styles.get(j.get("status", ""), j.get("status", ""))
+        table.add_row(
+            j.get("id", "?"),
+            str(j.get("pid", "?")),
+            st,
+            j.get("command", "")[:45] + ("…" if len(j.get("command", "")) > 45 else ""),
+            j.get("started", "")[:19],
+        )
+
+    console.print(Panel(table, title="[bold red]Background Scan Jobs[/]", border_style="red", padding=(1, 2)))
+    console.print("[dim]Use [bold]/attach <job_id>[/] to tail logs or [bold]/kill <job_id>[/] to stop a job.[/]")
+
+
+def handle_attach(args: list[str], agent: Agent) -> None:
+    if not args:
+        console.print("[dim]Usage: /attach <job_id>[/]")
+        return
+    job_id = args[0]
+    log_tail = jobs_mod.tail_job(job_id, lines=40)
+    console.print(Panel(log_tail, title=f"[bold cyan]Log Output — Job {job_id}[/]", border_style="cyan", padding=(1, 2)))
+
+
+def handle_kill(args: list[str], agent: Agent) -> None:
+    if not args:
+        console.print("[dim]Usage: /kill <job_id>[/]")
+        return
+    job_id = args[0]
+    if jobs_mod.kill_job(job_id):
+        console.print(f"[bold red]✓ Job {job_id} terminated.[/]")
+    else:
+        console.print(f"[red]Failed to terminate job {job_id}. Job not found.[/]")
+
+
+def handle_revshell(args: list[str], agent: Agent) -> None:
+    net_info = get_network_info()
+    tun0 = net_info.get("tun0_vpn_ip")
+    eth0 = net_info.get("eth0_ip")
+    suggested_ip = tun0 if tun0 != "(not connected)" else (eth0 if eth0 != "(not assigned)" else "10.10.14.x")
+
+    lhost = args[0] if args else Prompt.ask("[bold yellow]LHOST (Listening IP)[/]", default=suggested_ip)
+    lport = int(args[1]) if len(args) > 1 else int(Prompt.ask("[bold yellow]LPORT (Listening Port)[/]", default="9001"))
+
+    payload_data = generate_payload("bash", lhost, lport)
+
+    grid = Table.grid(padding=(0, 2))
+    grid.add_column(style="bold yellow", no_wrap=True, min_width=16)
+    grid.add_column()
+
+    grid.add_row("Netcat Listener", f"[bold green]{payload_data['listener_netcat']}[/]")
+    grid.add_row("Pwncat Listener", f"[bold green]{payload_data['listener_pwncat']}[/]")
+    grid.add_row("Bash One-Liner", f"[cyan]{payload_data['payload']}[/]")
+
+    py_payload = generate_payload("python", lhost, lport, "python")["payload"]
+    grid.add_row("Python One-Liner", f"[cyan]{py_payload}[/]")
+
+    ps_payload = generate_payload("powershell", lhost, lport, "powershell")["payload"]
+    grid.add_row("PowerShell One-Liner", f"[cyan]{ps_payload[:100]}…[/]")
+
+    console.print(Panel(grid, title=f"[bold red]Reverse Shell Generator — {lhost}:{lport}[/]", border_style="red", padding=(1, 2)))
+
+
+def handle_searchsploit(args: list[str], agent: Agent) -> None:
+    if not args:
+        query = Prompt.ask("[bold yellow]Search Query / CVE[/]")
+    else:
+        query = " ".join(args)
+
+    console.print(f"[dim]Searching Exploit-DB for: {query}…[/]")
+    out = search_exploits(query)
+    console.print(Panel(out, title=f"[bold red]searchsploit: {query}[/]", border_style="red", padding=(1, 2)))
+
+
+def handle_sessions(args: list[str], agent: Agent) -> None:
+    config.ensure_dirs()
+    session_files = sorted(config.SESSIONS_DIR.glob("*.json"), reverse=True)
+
+    if not session_files:
+        console.print("[dim]No saved sessions found.[/]")
+        return
+
+    if args and args[0] == "load" and len(args) > 1:
+        sid = args[1]
+        loaded_agent = Agent.load_session(sid)
+        if loaded_agent:
+            agent.session_id = loaded_agent.session_id
+            agent.history = loaded_agent.history
+            agent.current_target = loaded_agent.current_target
+            agent.total_input_tokens = loaded_agent.total_input_tokens
+            agent.total_output_tokens = loaded_agent.total_output_tokens
+            console.print(f"[bold green]✓ Loaded session {sid} (Target: {agent.current_target})[/]")
+            return
+        else:
+            console.print(f"[red]Failed to load session {sid}[/]")
+            return
+
+    table = Table(box=box.SIMPLE_HEAD, header_style="bold red", border_style="dim", padding=(0, 2))
+    table.add_column("Session ID", style="yellow", no_wrap=True)
+    table.add_column("Target", style="bold white")
+    table.add_column("Turns", style="cyan")
+    table.add_column("Updated", style="dim")
+
+    for sf in session_files[:15]:
+        try:
+            d = json.loads(sf.read_text())
+            sid = d.get("session_id", sf.stem)
+            tgt = d.get("target", "None")
+            turns = len([m for m in d.get("history", []) if m.get("role") == "user"])
+            table.add_row(sid, tgt, str(turns), d.get("updated_at", "")[:19])
+        except Exception:
+            pass
+
+    console.print(Panel(table, title="[bold red]Saved Assessment Sessions[/]", border_style="red", padding=(1, 2)))
+    console.print("[dim]Run [bold]/sessions load <session_id>[/] to resume a session.[/]")
+
+
+def handle_theme(args: list[str], agent: Agent) -> None:
+    if not args:
+        table = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
+        table.add_column(style="bold yellow", no_wrap=True)
+        table.add_column(style="white")
+        table.add_row("cyberpunk", "Neon Red & Cyan (Default)")
+        table.add_row("matrix", "Matrix Hacker Green")
+        table.add_row("stealth", "Monochrome Stealth Dark")
+        table.add_row("dark", "Vibrant Purple / Dark")
+        console.print(Panel(table, title="[bold red]Available Themes[/]", border_style="red"))
+        choice = Prompt.ask("[bold yellow]Select Theme[/]", choices=list(config.THEMES.keys()), default="cyberpunk")
+    else:
+        choice = args[0].lower()
+
+    if choice in config.THEMES:
+        config.set_value("theme", choice)
+        console.print(f"[bold green]✓ Theme set to: {choice}[/]")
+    else:
+        console.print(f"[red]Unknown theme. Available: {list(config.THEMES.keys())}[/]")
+
+
 def handle_config(args: list[str], agent: Agent) -> None:
     cfg = config.load()
 
@@ -132,11 +343,10 @@ def handle_config(args: list[str], agent: Agent) -> None:
         setup_wizard()
         return
 
-    # /config set <key> <value> OR /config <key> <value>
     cmd_args = args[1:] if args[0] == "set" else args
     if len(cmd_args) >= 2:
         key, value = cmd_args[0], " ".join(cmd_args[1:])
-        if key in ("auto_approve", "scope_required"):
+        if key in ("auto_approve", "scope_required", "stream_output", "track_tokens"):
             val_bool = value.lower() in ("true", "1", "yes", "on")
             config.set_value(key, val_bool)
             console.print(f"[green]✓[/] {key} = {val_bool}")
@@ -158,7 +368,6 @@ def handle_init(args: list[str], agent: Agent) -> None:
     mode = "bounty"
     skill = "web-recon"
 
-    # Support flags or positional
     if args:
         if "--target" in args:
             idx = args.index("--target")
@@ -262,7 +471,6 @@ def handle_scope(args: list[str], agent: Agent) -> None:
     rest = args[1:]
     target = ""
 
-    # Parse flags if present
     if "--target" in rest:
         idx = rest.index("--target")
         if idx + 1 < len(rest): target = rest[idx + 1]
@@ -355,7 +563,7 @@ def handle_engagements(_: list[str], agent: Agent) -> None:
 
 
 def handle_report(args: list[str], agent: Agent) -> None:
-    target = args[0] if args else agent.current_target
+    target = args[0] if (args and not args[0].startswith("-")) else agent.current_target
     if not target:
         target = _pick_engagement()
     if not target:
@@ -365,6 +573,9 @@ def handle_report(args: list[str], agent: Agent) -> None:
     if not data:
         console.print(f"[red]No intelligence found for '{target}'.[/]")
         return
+
+    html_out = intel_mod.path(target) / "report.html"
+    generate_html_report(data, output_path=html_out)
 
     prompt = (
         f"Generate a professional, executive-ready Penetration Testing Report for target '{target}'.\n"
@@ -381,12 +592,14 @@ def handle_report(args: list[str], agent: Agent) -> None:
     with Live(Spinner("dots", text=f"[cyan]Compiling assessment report for {target}…[/]"), refresh_per_second=20):
         result = agent.chat(prompt)
 
-    out_file = intel_mod.path(target) / "report.md"
-    if not out_file.exists():
-        out_file.write_text(result)
+    md_out = intel_mod.path(target) / "report.md"
+    if not md_out.exists():
+        md_out.write_text(result)
 
-    console.print(Markdown(result[:4000]))
-    console.print(f"\n[green]✓[/] Report successfully compiled → [bold]{out_file}[/]")
+    console.print(Markdown(result[:3500]))
+    console.print(f"\n[bold green]✓ Reports generated:[/]")
+    console.print(f"  • Markdown: [bold]{md_out}[/]")
+    console.print(f"  • Dark HTML: [bold cyan]{html_out}[/]")
 
 
 def handle_run(args: list[str], agent: Agent) -> None:
@@ -395,7 +608,7 @@ def handle_run(args: list[str], agent: Agent) -> None:
         return
     cmd = " ".join(args)
     console.print(f"[dim]$ {cmd}[/]")
-    res = run_shell(cmd, timeout=120)
+    res = run_shell(cmd, timeout=180)
     console.print(str(res) or "[dim](no output)[/]")
 
 
@@ -417,9 +630,17 @@ def _pick_engagement() -> str | None:
 
 SLASH_HANDLERS = {
     "/scope":       handle_scope,
+    "/plan":        handle_plan,
     "/init":        handle_init,
     "/intel":       handle_intel,
     "/playbook":    handle_playbook,
+    "/jobs":        handle_jobs,
+    "/attach":      handle_attach,
+    "/kill":        handle_kill,
+    "/revshell":    handle_revshell,
+    "/searchsploit":handle_searchsploit,
+    "/sessions":    handle_sessions,
+    "/theme":       handle_theme,
     "/engagements": handle_engagements,
     "/report":      handle_report,
     "/config":      handle_config,
@@ -455,9 +676,16 @@ def _status_bar(agent: Agent) -> str:
     else:
         parts.append("[red]no provider configured[/]")
 
-    turns = len([m for m in agent.history if m.get("role") == "user"])
-    if turns:
-        parts.append(f"[dim]{turns} turns[/]")
+    # Active jobs count
+    running_jobs = len([j for j in jobs_mod.list_jobs() if j.get("status") == "running"])
+    if running_jobs:
+        parts.append(f"[bold green]⚡ {running_jobs} bg jobs[/]")
+
+    # Token stats
+    total_tokens = agent.total_input_tokens + agent.total_output_tokens
+    if total_tokens > 0:
+        cost = agent.estimate_cost()
+        parts.append(f"[dim]{total_tokens:,} tokens (~${cost:.4f})[/]")
 
     return "  [dim]│[/]  ".join(parts)
 
@@ -480,7 +708,7 @@ def run() -> None:
         table.add_column("Description", style="white")
         for c, d in SLASH_CMDS.items():
             table.add_row(c, d)
-        console.print(Panel(table, title="[bold red]Kali Agent — Autonomous AI for Kali Linux[/]",
+        console.print(Panel(table, title="[bold red]Kali Agent v0.1.0 — Autonomous AI for Kali Linux[/]",
                             border_style="red", padding=(1, 2)))
         return
 
@@ -503,7 +731,6 @@ def run() -> None:
                 console.print(f"[red]Unknown command: {cmd}[/]")
             return
         else:
-            # Natural language one-shot prompt
             prompt = " ".join(raw_args)
             console.print(f"[dim]kali-agent ❯ {prompt}[/]\n")
             with Live(Spinner("dots", text="[red dim]thinking…[/]"), refresh_per_second=20, transient=True):
@@ -521,11 +748,14 @@ def run() -> None:
 
     all_completions = list(SLASH_CMDS.keys()) + SKILLS
     completer = WordCompleter(all_completions, ignore_case=True, sentence=True)
+    style_info = config.get_theme_style()
+    prompt_cls = style_info.get("prompt_class", "ansired bold")
+
     session: PromptSession = PromptSession(
         history=FileHistory(str(config.HIST_FILE)),
         auto_suggest=AutoSuggestFromHistory(),
         completer=completer,
-        style=PTKStyle.from_dict({"prompt": "ansired bold", "": "ansiwhite"}),
+        style=PTKStyle.from_dict({"prompt": prompt_cls, "": "ansiwhite"}),
     )
 
     while True:
@@ -591,7 +821,7 @@ def run() -> None:
                 table.add_column("Description", style="white")
                 for c, d in SLASH_CMDS.items():
                     table.add_row(c, d)
-                console.print(Panel(table, title="[bold red]pskill Commands[/]",
+                console.print(Panel(table, title="[bold red]Kali Agent v0.1.0 Commands[/]",
                                     border_style="red", padding=(1, 2)))
                 continue
 

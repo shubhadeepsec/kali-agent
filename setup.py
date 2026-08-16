@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="kali-agent",
-    version="3.0.0",
+    version="0.1.0",
     description="Kali Agent — Autonomous AI OS Controller and Security Agent for Kali Linux",
     author="Kali Agent Team",
     python_requires=">=3.9",

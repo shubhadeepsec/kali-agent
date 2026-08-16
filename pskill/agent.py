@@ -1,8 +1,10 @@
-"""agent.py — Multi-provider LLM backend for pskill (OpenAI, Anthropic, Gemini, Groq, Ollama)."""
+"""agent.py — Multi-provider LLM backend for Kali Agent with token & cost tracking and session persistence."""
 from __future__ import annotations
 
 import json
 import os
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -12,12 +14,14 @@ from .tools import TOOL_SCHEMAS, execute_tool
 SYSTEM_PROMPT = """You are Kali Agent — an autonomous AI OS Controller and Senior Security Operator for Kali Linux.
 
 You have full control over the local Kali Linux system and environment. You can:
-1. EXECUTE OS COMMANDS: Run any bash command, script, binary, or CLI utility across Kali Linux.
+1. EXECUTE OS COMMANDS: Run any bash command, script, binary, or utility in any directory. Set background: true for long scans.
 2. ORCHESTRATE SECURITY TOOLS: Leverage all pre-installed Kali tools (Nmap, Metasploit, Burp Suite, Wireshark/tshark, Gobuster, ffuf, SQLMap, Hydra, Hashcat, John the Ripper, Ghidra, Radare2, Impacket, NetExec, etc.).
 3. AUTO-INSTALL & MANAGE TOOLS: Install missing packages and tools using `manage_packages` (via apt, pip, go, cargo, or git).
 4. SYSTEM & SERVICE CONTROL: Manage systemd services (postgresql, docker, apache2, ssh, tor, openvpn), check network sockets, monitor processes, and inspect hardware diagnostics.
-5. FILESYSTEM & SCRIPTING: Read, write, search, and edit files, scripts, custom wordlists, and reports.
-6. TARGET STATE & METHODOLOGY: Track targets in intel.json and follow 17 specialized security playbooks (web-recon, api-testing, idor-bola, injection, oauth-auth, etc.).
+5. EXPLOIT & CVE LOOKUP: Query local Exploit-DB and CVE databases using `search_exploits` for service versions.
+6. NETWORK & REVERSE SHELLS: Inspect interface IPs (tun0/eth0) with `get_network_info` and craft listener/payload one-liners using `generate_payload`.
+7. FILESYSTEM & SCRIPTING: Read, write, search, and edit files, scripts, custom wordlists, and reports.
+8. TARGET STATE & METHODOLOGY: Track targets in intel.json and follow 17 specialized security playbooks.
 
 ## Core Principles
 1. SCOPE & AUTHORIZATION: Confirm target authorization prior to executing intrusive target-facing scans or exploits.
@@ -26,6 +30,16 @@ You have full control over the local Kali Linux system and environment. You can:
 4. RECORD FINDINGS: As soon as an asset, endpoint, service, or vulnerability is identified, record it in target state using update_intel.
 5. CONCISE & TECHNICAL: Output direct, clean technical summaries. Format commands in markdown code blocks.
 """
+
+MODEL_PRICING = {
+    "gpt-4o": {"input": 2.50, "output": 10.00},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+    "claude-sonnet-4-5": {"input": 3.00, "output": 15.00},
+    "claude-haiku": {"input": 0.80, "output": 4.00},
+    "gemini-2.0-flash-exp": {"input": 0.00, "output": 0.00},
+    "llama-3.1-70b-versatile": {"input": 0.59, "output": 0.79},
+    "llama3.1": {"input": 0.00, "output": 0.00},
+}
 
 
 def _format_openai_messages(history: list[dict]) -> list[dict]:
@@ -101,11 +115,15 @@ def _format_anthropic_messages(history: list[dict]) -> list[dict]:
 
 
 class Agent:
-    """Multi-provider LLM Agent with automated tool calling loop."""
+    """Multi-provider LLM Agent with automated tool calling, token metrics, and session persistence."""
 
-    def __init__(self):
+    def __init__(self, session_id: str | None = None):
+        self.session_id = session_id or str(uuid.uuid4())[:8]
         self.history: list[dict] = []
         self.current_target: str = ""
+        self.total_input_tokens: int = 0
+        self.total_output_tokens: int = 0
+        self.created_at: str = datetime.now(timezone.utc).isoformat()
 
     def _get_client(self):
         provider = config.get("api_provider", "")
@@ -162,13 +180,21 @@ class Agent:
             for t in TOOL_SCHEMAS
         ]
 
+    def estimate_cost(self) -> float:
+        """Calculate estimated USD cost for the session based on model rates."""
+        provider, _, model = self._get_client()
+        pricing = MODEL_PRICING.get(model, {"input": 1.00, "output": 3.00})
+        cost = (self.total_input_tokens / 1_000_000) * pricing["input"] + \
+               (self.total_output_tokens / 1_000_000) * pricing["output"]
+        return round(cost, 5)
+
     def chat(
         self,
         user_msg: str,
         confirm_fn: Callable[[str, str], bool] | None = None,
         stream_fn: Callable[[str], None] | None = None,
     ) -> str:
-        """Send a user message, resolve tool calls autonomously, and return final output."""
+        """Send user message, resolve tool calls autonomously, track token metrics, and return final output."""
         self.history.append({"role": "user", "content": user_msg})
 
         provider, client, model = self._get_client()
@@ -186,6 +212,10 @@ class Agent:
                     messages=messages,
                     tools=self._tools_for_provider("anthropic"),
                 )
+
+                if hasattr(response, "usage") and response.usage:
+                    self.total_input_tokens += getattr(response.usage, "input_tokens", 0)
+                    self.total_output_tokens += getattr(response.usage, "output_tokens", 0)
 
                 text_blocks = []
                 tool_uses = []
@@ -244,6 +274,10 @@ class Agent:
                     tool_choice="auto",
                 )
 
+                if hasattr(response, "usage") and response.usage:
+                    self.total_input_tokens += getattr(response.usage, "prompt_tokens", 0)
+                    self.total_output_tokens += getattr(response.usage, "completion_tokens", 0)
+
                 msg = response.choices[0].message
                 round_text = msg.content or ""
                 if round_text:
@@ -290,6 +324,7 @@ class Agent:
                         "content": res,
                     })
 
+        self.save_session()
         return final_text
 
     def clear_history(self) -> None:
@@ -304,3 +339,36 @@ class Agent:
             "role": "assistant",
             "content": "Context received. I will incorporate this into the assessment."
         })
+
+    def save_session(self) -> None:
+        """Persist session state and history to disk."""
+        config.ensure_dirs()
+        session_file = config.SESSIONS_DIR / f"{self.session_id}.json"
+        data = {
+            "session_id": self.session_id,
+            "target": self.current_target,
+            "created_at": self.created_at,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "total_input_tokens": self.total_input_tokens,
+            "total_output_tokens": self.total_output_tokens,
+            "history": self.history,
+        }
+        session_file.write_text(json.dumps(data, indent=2))
+
+    @classmethod
+    def load_session(cls, session_id: str) -> Agent | None:
+        """Load a previous session from disk."""
+        session_file = config.SESSIONS_DIR / f"{session_id}.json"
+        if not session_file.exists():
+            return None
+        try:
+            data = json.loads(session_file.read_text())
+            agent = cls(session_id=session_id)
+            agent.current_target = data.get("target", "")
+            agent.total_input_tokens = data.get("total_input_tokens", 0)
+            agent.total_output_tokens = data.get("total_output_tokens", 0)
+            agent.history = data.get("history", [])
+            agent.created_at = data.get("created_at", "")
+            return agent
+        except Exception:
+            return None
